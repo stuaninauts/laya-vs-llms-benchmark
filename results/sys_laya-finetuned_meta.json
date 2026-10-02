@@ -1,0 +1,8 @@
+{
+  "system": "laya-finetuned",
+  "device": "cuda",
+  "single_p50_ms": 81.8553904973669,
+  "single_p95_ms": 122.43906144867648,
+  "batch_ms_per_complaint": 46.30739797611265,
+  "notes": "checkpoint=models/laya-cfpb"
+}

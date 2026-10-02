@@ -1,0 +1,8 @@
+{
+  "system": "laya-zeroshot",
+  "device": "cuda",
+  "single_p50_ms": 70.74789850230445,
+  "single_p95_ms": 88.62172320004902,
+  "batch_ms_per_complaint": 49.36585620166524,
+  "notes": "checkpoint=convaiinnovations/laya"
+}
