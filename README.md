@@ -12,17 +12,21 @@ in a single forward pass instead of generating text.
 ## TL;DR
 
 - **Accuracy is a tie, latency is not.** Fine-tuned small models, frozen embeddings + logistic regression,
-  TF-IDF and the GPT models all land in the 77–81% band for routing to 9 queues — but small models answer in
-  1–80 ms, LLMs in ~1 s (API *or* local GPU).
+  TF-IDF and the GPT models all land in the 77–81% band for routing to 9 queues, and most pairwise gaps are
+  not statistically significant (TF-IDF vs gpt-5.4-mini: +0.1 pp, p = 1). Small models answer in 1–80 ms,
+  LLMs in ~1 s (API *or* local GPU).
 - **Small models are better calibrated.** Their stated confidence matches reality (ECE 0.03–0.05); every LLM
-  is overconfident (ECE 0.09–0.21), even when the probability is read from token logprobs.
-- **The cascade beats every model alone.** ModernBERT decides 74% of complaints locally and sends the rest to
-  `gpt-5.6-luna`: **82.2% accuracy at US$ 35 per 1M complaints**, vs 79.2% / US$ 137 for luna alone and
-  80.6% / US$ 1,367 for `gpt-5.6-terra`. Swapping luna for terra as the fallback changes nothing (82.1% with
-  luna vs 82.0% with terra on the same 900 complaints) at 10x the cost.
-- **Laya works once fine-tuned, but a plain fine-tune of the same backbone works better.** Laya goes from 45%
-  zero-shot to 77% after fine-tuning; ModernBERT-large (Laya's own base) fine-tuned with ordinary
-  cross-entropy on the same data reaches 79%, a higher fraud AUC, and is 3x faster.
+  is overconfident (ECE 0.09–0.21), even when the probability is read from token logprobs. Every
+  small-model-vs-GPT calibration gap tested is significant (bootstrap 95% CIs exclude zero).
+- **The cascade is the best deal on the table.** ModernBERT decides 74% of complaints locally and sends the
+  rest to `gpt-5.6-luna`: **82.2% accuracy at US$ 35 per 1M complaints**. That is significantly better than
+  luna alone (79.2%, +3.0 pp, p < 0.001) and than ModernBERT alone (+3.4 pp). Against `gpt-5.6-terra`, the
+  most expensive model, it is a statistical tie (+1.6 pp, p = 0.13) at **1/39 of the cost**. Swapping luna
+  for terra as the fallback changes nothing (82.1% vs 82.0% on the same 900 complaints) at 10x the cost.
+- **Laya works once fine-tuned, but adds nothing measurable over a plain fine-tune.** Laya goes from 45%
+  zero-shot to 77% after fine-tuning. ModernBERT-large (Laya's own base) fine-tuned with ordinary
+  cross-entropy on the same data reaches 79% (+2.0 pp, not significant after correction), a slightly higher
+  fraud AUC (+0.017), the same calibration, and is 3x faster.
 
 ![Accuracy, latency and cost of the main systems](figs/tradeoff_panels.png)
 
@@ -38,10 +42,11 @@ point cost, in money and in latency, for *this* task?
   matches gpt-5.4-mini on routing accuracy and fraud AUC, is better calibrated, answers in 1 ms and costs
   essentially nothing. If labeled data exists, this is the bar every heavier model has to clear.
 - **Most of the accuracy is cheap; the last points are not.** Going from TF-IDF to the best single model
-  (gpt-5.6-terra) buys about 3 points (77.8% → 80.6% on the paired 900 complaints) for ~US$ 1,400 per 1M
-  decisions and ~1 s per call.
-- **Spend the LLM only where the small model is unsure.** A cascade keeps the cheap path for most traffic
-  and reaches the highest accuracy of the whole benchmark.
+  (gpt-5.6-terra) buys about 3 points (77.8% → 80.6% on the paired 900 complaints, not significant after
+  correction) for ~US$ 1,400 per 1M decisions and ~1 s per call.
+- **Spend the LLM only where the small model is unsure.** A cascade keeps the cheap path for most traffic,
+  reaches the highest accuracy of the benchmark and is the only configuration that significantly beats the
+  LLM it falls back to.
 - **When an LLM is the right call:** no labeled data yet (zero-shot), labels that change often, or
   decisions that need reasoning over long context. That is where the 1 s and the per-token cost pay off.
 
@@ -108,6 +113,33 @@ API cost = synchronous list price; the Batch API halves it. Latency = one compla
 `results/cascade_best.csv` lists the best threshold per cascade (up to 82.5%), but that threshold is chosen on
 the test set and is therefore optimistic.
 
+## Statistical significance
+
+All systems answered the same complaints, so every test is paired (`16_significance.py`,
+`results/significance.md`). Accuracy: exact McNemar test, Holm-corrected across 10 comparisons fixed before
+looking at the results, plus a paired bootstrap 95% CI. Fraud: paired bootstrap CIs of the AUC and ECE gaps.
+
+| Comparison | Δ accuracy | 95% CI | p (Holm) |
+|---|---|---|---|
+| Cascade ModernBERT → luna vs luna alone | +3.0 pp | [+1.6, +4.4] | < 0.001 |
+| Cascade ModernBERT → luna vs ModernBERT alone | +3.4 pp | [+2.0, +4.8] | < 0.001 |
+| gpt-5.6-luna vs gpt-5.4-mini | +2.1 pp | [+0.8, +3.3] | 0.017 |
+| gpt-5.6-luna vs ModernBERT | +0.4 pp | [−1.7, +2.4] | 1 |
+| ModernBERT vs Laya fine-tuned | +2.0 pp | [+0.4, +3.7] | 0.15 |
+| ModernBERT vs TF-IDF | +1.6 pp | [−0.3, +3.3] | 0.52 |
+| TF-IDF vs gpt-5.4-mini | +0.1 pp | [−2.0, +2.3] | 1 |
+| gpt-5.6-terra vs gpt-5.6-luna (s900) | +1.0 pp | [−0.6, +2.6] | 1 |
+| gpt-5.6-terra vs TF-IDF (s900) | +2.8 pp | [+0.1, +5.6] | 0.31 |
+| Cascade → terra vs cascade → luna (s900) | −0.1 pp | [−1.1, +0.9] | 1 |
+
+Post-hoc (not in the fixed list, uncorrected): cascade ModernBERT → luna vs gpt-5.6-terra on s900,
++1.6 pp, CI [−0.3, +3.3], p = 0.13.
+
+Fraud (bootstrap 95% CI of the difference, not multiplicity-corrected): ModernBERT beats gpt-5.4-mini on AUC
+(+0.038 [+0.018, +0.058]) and on ECE (−0.065 [−0.083, −0.045]); TF-IDF ties gpt-5.4-mini on AUC
+(−0.002 [−0.025, +0.019]) but is better calibrated (−0.058 [−0.078, −0.040]); ModernBERT and Laya tie on
+ECE (−0.004 [−0.015, +0.009]).
+
 ## Method
 
 - **Same instructions for every API LLM:** identical system prompt and JSON schema (structured outputs),
@@ -152,6 +184,7 @@ python 13_llm_api.py estimate        # API cost table (free)
 python 13_llm_api.py submit openai gpt-5.6-luna full --spend   # paid; never overwrites results
 python 06_analyze.py                 # results/summary.md + cascades
 python 15_figures.py                 # figures
+python 16_significance.py            # paired significance tests
 ```
 
 `SMOKE=1` runs any local script on 5 complaints. Paid scripts refuse to run without `--spend` and stop at a
@@ -177,6 +210,7 @@ budget cap (`BUDGET_USD`, default 2). The full experiment cost about **US$ 2.20*
 | `03_laya_eval.py`, `05_finetune.py` | Laya zero-shot, fine-tuning, evaluation |
 | `10_local_llm.py`, `pull_ollama_models.sh` | local LLMs via Ollama with logprobs |
 | `06_analyze.py`, `15_figures.py`, `run.sh` | metrics, paired comparison, cascades, figures |
+| `16_significance.py` | paired significance tests (McNemar, bootstrap) |
 | `common.py`, `sysio.py`, `download_models.py` | shared definitions, result format, model download |
 | `results/` | per-system predictions (no complaint text), summary and cascade tables |
 
