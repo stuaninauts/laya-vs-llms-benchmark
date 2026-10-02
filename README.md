@@ -24,6 +24,29 @@ in a single forward pass instead of generating text.
   zero-shot to 77% after fine-tuning; ModernBERT-large (Laya's own base) fine-tuned with ordinary
   cross-entropy on the same data reaches 79%, a higher fraud AUC, and is 3x faster.
 
+![Accuracy, latency and cost of the main systems](figs/tradeoff_panels.png)
+
+![Hype check: TF-IDF vs gpt-5.4-mini](figs/hype_check.png)
+
+## When is an LLM worth it?
+
+New decision models like Jev and Laya, and every new LLM release, come with the promise of replacing
+everything. For a **classification** step the useful question is narrower: what does each extra accuracy
+point cost, in money and in latency, for *this* task?
+
+- **Start with the boring baseline.** A TF-IDF + logistic regression trained on 3,600 labeled examples
+  matches gpt-5.4-mini on routing accuracy and fraud AUC, is better calibrated, answers in 1 ms and costs
+  essentially nothing. If labeled data exists, this is the bar every heavier model has to clear.
+- **Most of the accuracy is cheap; the last points are not.** Going from TF-IDF to the best single model
+  (gpt-5.6-terra) buys about 3 points (77.8% → 80.6% on the paired 900 complaints) for ~US$ 1,400 per 1M
+  decisions and ~1 s per call.
+- **Spend the LLM only where the small model is unsure.** A cascade keeps the cheap path for most traffic
+  and reaches the highest accuracy of the whole benchmark.
+- **When an LLM is the right call:** no labeled data yet (zero-shot), labels that change often, or
+  decisions that need reasoning over long context. That is where the 1 s and the per-token cost pay off.
+
+![Cost vs accuracy](figs/cost_vs_accuracy.png)
+
 ![Routing accuracy vs latency](figs/accuracy_vs_latency.png)
 
 ![Cascade accuracy and cost](figs/cascade_cost.png)
@@ -134,12 +157,21 @@ python 15_figures.py                 # figures
 `SMOKE=1` runs any local script on 5 complaints. Paid scripts refuse to run without `--spend` and stop at a
 budget cap (`BUDGET_USD`, default 2). The full experiment cost about **US$ 2.20** in API calls.
 
+## Troubleshooting
+
+- **`no CUDA` after the machine wakes from suspend** (PyTorch reports "CUDA unknown error", kernel log shows
+  an Xid error): reload the NVIDIA UVM module with `sudo rmmod nvidia_uvm && sudo modprobe nvidia_uvm`, or
+  reboot.
+- **Out of memory on a 12 GB GPU:** run GPU jobs one at a time (`run.sh` already does). Batched Laya
+  inference takes ~5 GB and fine-tuning ~9 GB.
+- **`transformers` fails importing Keras/TensorFlow:** `export USE_TF=0`.
+
 ## Layout
 
 | File | Step |
 |---|---|
 | `00_download_data.py`, `02_prepare.py`, `12_make_samples.py` | data, dedup, labels, splits |
-| `build_eda_notebook.py` → `07_eda.ipynb` | exploratory analysis (in Portuguese) |
+| `build_eda_notebook.py` → `07_eda.ipynb` | exploratory analysis |
 | `llm_prompt.py`, `04_llm_baseline.py`, `13_llm_api.py`, `14_api_plan.sh` | API LLMs (shared prompt, budget guard) |
 | `11_tfidf.py`, `09_embeddings_logreg.py`, `08_encoder_finetune.py` | small-model baselines and control |
 | `03_laya_eval.py`, `05_finetune.py` | Laya zero-shot, fine-tuning, evaluation |
@@ -147,8 +179,6 @@ budget cap (`BUDGET_USD`, default 2). The full experiment cost about **US$ 2.20*
 | `06_analyze.py`, `15_figures.py`, `run.sh` | metrics, paired comparison, cascades, figures |
 | `common.py`, `sysio.py`, `download_models.py` | shared definitions, result format, model download |
 | `results/` | per-system predictions (no complaint text), summary and cascade tables |
-
-Some code comments and the EDA notebook are in Portuguese.
 
 ## Notes
 
