@@ -1,1 +1,158 @@
-# laya-vs-llms-benchmark
+# LLM cascade for financial complaint triage
+
+**Do you need an LLM to route a customer complaint?** This repo benchmarks 13 systems on the same task — from
+TF-IDF to GPT-5.6 — on 1,800 real US consumer-finance complaints, measuring accuracy, calibration,
+latency and cost. It also tests a *cascade*: a small model decides when it is confident and only hands the
+doubtful cases to an LLM.
+
+The starting question was [Laya](https://github.com/NandhaKishorM/laya), an open-source "System 1"
+decision model (an alternative to TypeSafe's Jev) that answers typed decisions with calibrated probabilities
+in a single forward pass instead of generating text.
+
+## TL;DR
+
+- **Accuracy is a tie, latency is not.** Fine-tuned small models, frozen embeddings + logistic regression,
+  TF-IDF and the GPT models all land in the 77–81% band for routing to 9 queues — but small models answer in
+  1–80 ms, LLMs in ~1 s (API *or* local GPU).
+- **Small models are better calibrated.** Their stated confidence matches reality (ECE 0.03–0.05); every LLM
+  is overconfident (ECE 0.09–0.21), even when the probability is read from token logprobs.
+- **The cascade beats every model alone.** ModernBERT decides 74% of complaints locally and sends the rest to
+  `gpt-5.6-luna`: **82.2% accuracy at US$ 35 per 1M complaints**, vs 79.2% / US$ 137 for luna alone and
+  80.6% / US$ 1,367 for `gpt-5.6-terra`. Swapping luna for terra as the fallback changes nothing (82.1% with
+  luna vs 82.0% with terra on the same 900 complaints) at 10x the cost.
+- **Laya works once fine-tuned, but a plain fine-tune of the same backbone works better.** Laya goes from 45%
+  zero-shot to 77% after fine-tuning; ModernBERT-large (Laya's own base) fine-tuned with ordinary
+  cross-entropy on the same data reaches 79%, a higher fraud AUC, and is 3x faster.
+
+![Routing accuracy vs latency](figs/accuracy_vs_latency.png)
+
+![Cascade accuracy and cost](figs/cascade_cost.png)
+
+## Task
+
+Each complaint gets two decisions — the shape of a real triage step at a bank or fintech:
+
+1. **Queue** (9 classes): credit reporting, debt collection, credit card, checking/savings, money transfer,
+   mortgage, vehicle loan, student loan, personal loan.
+2. **Fraud report** (probability): does the consumer report fraud, a scam or identity theft? This flags the
+   *text* for prioritization — it is not a transaction fraud detector.
+
+## Data
+
+- [CFPB Consumer Complaint Database](https://www.consumerfinance.gov/data-research/consumer-complaints/)
+  (public), via the Hugging Face mirror `sovai/cfpb_complaints`: the official bulk download no longer
+  includes the narrative column. Narratives from Jan/2023 to May/2024.
+- **58.7% of 2023+ narratives are near-duplicate form letters** (71.5% in credit reporting). They were
+  removed; otherwise models score by memorizing templates.
+- Labels come from the product and issue the consumer selected. Ambiguous fraud labels ("information
+  belongs to someone else", monitoring-service issues) were dropped.
+- **Test:** 1,800 complaints, 200 per queue, fraud enriched to 21.2%. **Train:** 3,600, disjoint.
+  **Paired subset `s900`:** 100 per queue, used for the expensive model and paired comparisons.
+
+Raw data is not redistributed; `00_download_data.py` rebuilds it (the splits are deterministic).
+
+## Results (n = 1,800)
+
+| System | Type | Queue acc. | Fraud AUC | Fraud ECE ↓ | p50 latency | US$ / 1M |
+|---|---|---|---|---|---|---|
+| gpt-5.6-terra ¹ | API LLM | **80.6%** | 0.872 | 0.143 | 1,075 ms | 1,367 |
+| gpt-5.6-luna | API LLM | 79.2% | 0.850 | 0.164 | 986 ms | 137 |
+| ModernBERT-large, fine-tuned | small model | 78.8% | **0.906** | 0.046 | 26 ms | 0.14 ² |
+| Qwen3-Embedding-0.6B + LR | small model | 78.1% | 0.888 | 0.038 | 48 ms | 0.15 ² |
+| TF-IDF + LR | small model | 77.2% | 0.865 | 0.052 | **1 ms** | ~0 ² |
+| gpt-5.4-mini | API LLM | 77.1% | 0.868 | 0.111 | 961 ms | 512 |
+| Granite-embedding-small-r2 + LR | small model | 76.8% | 0.866 | **0.034** | 18 ms | 0.01 ² |
+| Laya, fine-tuned | small model | 76.8% | 0.889 | 0.050 | 82 ms | 0.33 ² |
+| Gemma 4 12B (Ollama) | local LLM | 75.4% | 0.788 | 0.163 | 1,123 ms | 7.8 ² |
+| gpt-5.4-nano | API LLM | 72.8% | 0.853 | 0.206 | 1,011 ms | 137 |
+| Qwen3.5 9B (Ollama) | local LLM | 71.6% | 0.810 | 0.086 | 848 ms | 6.2 ² |
+| Qwen3.5 4B (Ollama) | local LLM | 65.4% | 0.641 | 0.207 | 608 ms | 4.3 ² |
+| Laya, zero-shot | small model | 45.1% | 0.676 | 0.450 | 71 ms | 0.35 ² |
+
+¹ Evaluated on the paired `s900` subset (cost). On `s900`, the ordering of the other systems is unchanged
+(`results/summary.md`). ² Local cost = GPU energy at batched throughput (170 W, US$ 0.15/kWh).
+API cost = synchronous list price; the Batch API halves it. Latency = one complaint per call.
+
+### Cascade (threshold fixed at 0.7 before looking at results)
+
+| Local model → fallback | Decided locally | Final accuracy | US$ / 1M |
+|---|---|---|---|
+| ModernBERT → gpt-5.6-luna | 74% | **82.2%** | **35** |
+| Qwen3-Embedding + LR → gpt-5.6-luna | 63% | 81.9% | 50 |
+| Laya fine-tuned → gpt-5.6-luna | 58% | 80.8% | 58 |
+| ModernBERT → gpt-5.4-mini | 74% | 81.0% | 132 |
+
+`results/cascade_best.csv` lists the best threshold per cascade (up to 82.5%), but that threshold is chosen on
+the test set and is therefore optimistic.
+
+## Method
+
+- **Same instructions for every API LLM:** identical system prompt and JSON schema (structured outputs),
+  reasoning effort `none`. Accuracy runs via the Batch API; latency from 198 synchronous calls.
+- **Local LLMs** (Ollama 0.35): the model answers `<letter> <Y|N>` and the probabilities are read from the
+  token logprobs, so their calibration is measured on real probabilities, not on a verbalized number.
+- **Laya:** zero-shot with the English checkpoint, then fine-tuned with its own RLCD objective, adapted
+  from the [official notebook](https://github.com/NandhaKishorM/laya/blob/main/notebooks/laya_finetune_typed_decisions_2xT4_kaggle.ipynb)
+  to one GPU (3 epochs), with temperature calibration on 200 held-out training complaints.
+- **ModernBERT-large control:** Laya's own backbone, fine-tuned with ordinary cross-entropy on the same
+  3,600 complaints and calibrated on the same held-out slice. It isolates what RLCD adds.
+- **Embeddings:** frozen encoder + `LogisticRegressionCV`. **TF-IDF:** 1–2-grams + logistic regression.
+- **Metrics:** accuracy and macro-F1 for the queue; ROC AUC, precision/recall and expected calibration error
+  (10 bins) for fraud; p50/p95 latency of a single decision; cost per 1M complaints.
+
+## Limitations
+
+- Labels are what consumers picked in a form, so some "errors" are legitimate (a debt that shows up on a
+  credit report fits two queues). The ceiling is below 100%.
+- The test set is balanced by queue and enriched for fraud; it does not reflect production frequencies.
+- English only; one random split and one seed per model; prompts were not tuned per model.
+- Laya reads at most ~338 tokens of each complaint (its 512-token window is shared with the question and
+  options). It reads the full text in 73.6% of complaints.
+- API latency depends on network location (measured from southern Brazil).
+- TypeSafe's Jev itself was not tested (early access only).
+
+## Reproduce
+
+```bash
+uv venv --python 3.10 && source .venv/bin/activate
+uv pip install -r requirements.txt
+export USE_TF=0                      # only if TensorFlow is installed system-wide
+
+python 00_download_data.py           # data/cfpb_2023plus.parquet
+python 02_prepare.py                 # dedup, labels, train/test splits
+python 12_make_samples.py            # paired s900 + latency subset
+python download_models.py            # HF weights (resumable)
+./pull_ollama_models.sh              # local LLMs (Ollama >= 0.12.11)
+
+./run.sh 1 2 3                       # all local systems, one GPU job at a time (~3.5 h on an RTX 3060)
+python 13_llm_api.py estimate        # API cost table (free)
+python 13_llm_api.py submit openai gpt-5.6-luna full --spend   # paid; never overwrites results
+python 06_analyze.py                 # results/summary.md + cascades
+python 15_figures.py                 # figures
+```
+
+`SMOKE=1` runs any local script on 5 complaints. Paid scripts refuse to run without `--spend` and stop at a
+budget cap (`BUDGET_USD`, default 2). The full experiment cost about **US$ 2.20** in API calls.
+
+## Layout
+
+| File | Step |
+|---|---|
+| `00_download_data.py`, `02_prepare.py`, `12_make_samples.py` | data, dedup, labels, splits |
+| `build_eda_notebook.py` → `07_eda.ipynb` | exploratory analysis (in Portuguese) |
+| `llm_prompt.py`, `04_llm_baseline.py`, `13_llm_api.py`, `14_api_plan.sh` | API LLMs (shared prompt, budget guard) |
+| `11_tfidf.py`, `09_embeddings_logreg.py`, `08_encoder_finetune.py` | small-model baselines and control |
+| `03_laya_eval.py`, `05_finetune.py` | Laya zero-shot, fine-tuning, evaluation |
+| `10_local_llm.py`, `pull_ollama_models.sh` | local LLMs via Ollama with logprobs |
+| `06_analyze.py`, `15_figures.py`, `run.sh` | metrics, paired comparison, cascades, figures |
+| `common.py`, `sysio.py`, `download_models.py` | shared definitions, result format, model download |
+| `results/` | per-system predictions (no complaint text), summary and cascade tables |
+
+Some code comments and the EDA notebook are in Portuguese.
+
+## Notes
+
+Personal project built on public data; not affiliated with any employer. Model weights follow their own
+licenses (Laya: Apache-2.0; ModernBERT, Qwen and Granite: Apache-2.0; Gemma 4: Apache-2.0).
+
+Code: [MIT](LICENSE).
