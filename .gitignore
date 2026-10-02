@@ -1,17 +1,17 @@
-# ambiente
+# environment
 .venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-# dados brutos e derivados (pesados; reproduzíveis via 02_prepare.py)
+# raw and derived data (large; reproducible via 02_prepare.py)
 data/
 
-# pesos do fine-tuning e logs de execução
+# fine-tuning weights and run logs
 models/
 logs/
 
-# segredos
+# secrets
 .env
 *.env
 

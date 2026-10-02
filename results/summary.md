@@ -1,6 +1,6 @@
-# Resultados — triagem de reclamações CFPB
+# Results — CFPB complaint triage
 
-Teste: 1800 reclamações, 9 filas (200 cada), fraude 21.2%.
+Test: 1800 complaints, 9 queues (200 each), fraud 21.2%.
 
 | system                                |    n |   product_acc |   product_f1_macro |   fraud_precision |   fraud_recall |   fraud_f1 |   fraud_auc |   fraud_ece |    p50_ms |    p95_ms |   usd_per_1M |   usd_per_1M_cloud_T4 |
 |:--------------------------------------|-----:|--------------:|-------------------:|------------------:|---------------:|-----------:|------------:|------------:|----------:|----------:|-------------:|----------------------:|
@@ -20,9 +20,9 @@ Teste: 1800 reclamações, 9 filas (200 cada), fraude 21.2%.
 | llm-qwen3.5-4b (cuda (ollama))        | 1800 |        0.6544 |             0.6522 |            0.3508 |         0.5092 |     0.4154 |      0.641  |      0.2066 |  607.853  |  885.677  |       4.3013 |               59.0378 |
 | laya-zeroshot (cuda)                  | 1800 |        0.4511 |             0.4722 |            0.2506 |         0.8927 |     0.3913 |      0.6759 |      0.4503 |   70.7479 |   88.6217 |       0.3497 |                4.7995 |
 
-Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote; referência de nuvem T4 US$ 0.35/h. p50/p95 = decisão isolada (1 reclamação por chamada); NaN = rodado via Batch API (sem latência). Sistemas com n diferente não são diretamente comparáveis — ver a tabela pareada abaixo.
+Local cost = energy (170 W GPU / 65 W CPU, US$ 0.15/kWh) at batch throughput; T4 cloud reference US$ 0.35/h. p50/p95 = isolated decision (1 complaint per call); NaN = run via the Batch API (no latency). Systems with a different n are not directly comparable — see the paired table below.
 
-## Comparação pareada na amostra s900 (900 reclamações, as mesmas para todos)
+## Paired comparison on the s900 subset (900 complaints, the same for every system)
 
 | system                |   n |   product_acc |   product_f1_macro |   fraud_precision |   fraud_recall |   fraud_f1 |   fraud_auc |   fraud_ece |
 |:----------------------|----:|--------------:|-------------------:|------------------:|---------------:|-----------:|------------:|------------:|
@@ -40,7 +40,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 | llm-qwen3.5-4b        | 900 |        0.65   |             0.6493 |            0.3431 |         0.4921 |     0.4043 |      0.6381 |      0.1977 |
 | laya-zeroshot         | 900 |        0.4589 |             0.4768 |            0.2511 |         0.8743 |     0.3902 |      0.6599 |      0.4422 |
 
-## Cascata emb-granite-r2 → gpt-5.4-mini (n=1800)
+## Cascade emb-granite-r2 → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -59,7 +59,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1872 |        0.775  |              0.9881 |     416.025  |
 |        0.95 |        0.0867 |        0.7717 |              0.9936 |     467.493  |
 
-## Cascata emb-qwen3emb → gpt-5.4-mini (n=1800)
+## Cascade emb-qwen3emb → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -78,7 +78,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3444 |        0.7806 |              0.9661 |     335.693  |
 |        0.95 |        0.2267 |        0.775  |              0.973  |     395.977  |
 
-## Cascata laya-finetuned → gpt-5.4-mini (n=1800)
+## Cascade laya-finetuned → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -97,7 +97,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3689 |        0.7817 |              0.9533 |     323.357  |
 |        0.95 |        0.2222 |        0.7744 |              0.97   |     398.427  |
 
-## Cascata laya-zeroshot → gpt-5.4-mini (n=1800)
+## Cascade laya-zeroshot → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -116,7 +116,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1328 |        0.7594 |              0.7657 |      444.231 |
 |        0.95 |        0.0689 |        0.7628 |              0.7419 |      476.932 |
 
-## Cascata llm-gemma4-12b-it-qat → gpt-5.4-mini (n=1800)
+## Cascade llm-gemma4-12b-it-qat → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -135,7 +135,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.8594 |        0.7733 |              0.8041 |      79.7851 |
 |        0.95 |        0.8139 |        0.7728 |              0.8184 |     103.102  |
 
-## Cascata llm-qwen3.5-4b → gpt-5.4-mini (n=1800)
+## Cascade llm-qwen3.5-4b → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -154,7 +154,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3517 |        0.7667 |              0.8689 |     336.146  |
 |        0.95 |        0.2156 |        0.7672 |              0.8866 |     405.813  |
 
-## Cascata llm-qwen3.5-9b → gpt-5.4-mini (n=1800)
+## Cascade llm-qwen3.5-9b → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -173,7 +173,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.4844 |        0.7622 |              0.8567 |     270.127  |
 |        0.95 |        0.3472 |        0.7644 |              0.8752 |     340.363  |
 
-## Cascata modernbert-ft → gpt-5.4-mini (n=1800)
+## Cascade modernbert-ft → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -192,7 +192,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.4983 |        0.795  |              0.9498 |     256.917  |
 |        0.95 |        0.3506 |        0.7783 |              0.9746 |     332.556  |
 
-## Cascata tfidf-logreg → gpt-5.4-mini (n=1800)
+## Cascade tfidf-logreg → gpt-5.4-mini (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -211,7 +211,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1044 |        0.7728 |              0.9734 |     458.383  |
 |        0.95 |        0.0422 |        0.7722 |              0.9737 |     490.231  |
 
-## Cascata emb-granite-r2 → gpt-5.6-luna (n=1800)
+## Cascade emb-granite-r2 → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -230,7 +230,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1872 |        0.7944 |              0.9881 |     111.099  |
 |        0.95 |        0.0867 |        0.7922 |              0.9936 |     124.842  |
 
-## Cascata emb-qwen3emb → gpt-5.6-luna (n=1800)
+## Cascade emb-qwen3emb → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -249,7 +249,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3444 |        0.7989 |              0.9661 |      89.7518 |
 |        0.95 |        0.2267 |        0.7933 |              0.973  |     105.849  |
 
-## Cascata laya-finetuned → gpt-5.6-luna (n=1800)
+## Cascade laya-finetuned → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -268,7 +268,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3689 |        0.7994 |              0.9533 |      86.5862 |
 |        0.95 |        0.2222 |        0.795  |              0.97   |     106.632  |
 
-## Cascata laya-zeroshot → gpt-5.6-luna (n=1800)
+## Cascade laya-zeroshot → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -287,7 +287,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1328 |        0.7794 |              0.7657 |     118.879  |
 |        0.95 |        0.0689 |        0.7828 |              0.7419 |     127.611  |
 
-## Cascata llm-gemma4-12b-it-qat → gpt-5.6-luna (n=1800)
+## Cascade llm-gemma4-12b-it-qat → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -306,7 +306,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.8594 |        0.7833 |              0.8041 |      27.0536 |
 |        0.95 |        0.8139 |        0.7872 |              0.8184 |      33.28   |
 
-## Cascata llm-qwen3.5-4b → gpt-5.6-luna (n=1800)
+## Cascade llm-qwen3.5-4b → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -325,7 +325,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3517 |        0.7861 |              0.8689 |      92.9134 |
 |        0.95 |        0.2156 |        0.7878 |              0.8866 |     111.517  |
 
-## Cascata llm-qwen3.5-9b → gpt-5.6-luna (n=1800)
+## Cascade llm-qwen3.5-9b → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -344,7 +344,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.4844 |        0.7811 |              0.8567 |      76.7085 |
 |        0.95 |        0.3472 |        0.7844 |              0.8752 |      95.4636 |
 
-## Cascata modernbert-ft → gpt-5.6-luna (n=1800)
+## Cascade modernbert-ft → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -363,7 +363,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.4983 |        0.8089 |              0.9498 |      68.7089 |
 |        0.95 |        0.3506 |        0.7978 |              0.9746 |      88.9067 |
 
-## Cascata tfidf-logreg → gpt-5.6-luna (n=1800)
+## Cascade tfidf-logreg → gpt-5.6-luna (n=1800)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -382,7 +382,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1044 |        0.7922 |              0.9734 |     122.402  |
 |        0.95 |        0.0422 |        0.7922 |              0.9737 |     130.906  |
 
-## Cascata emb-granite-r2 → gpt-5.6-terra (n=900)
+## Cascade emb-granite-r2 → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -401,7 +401,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1989 |        0.8111 |              0.9944 |    1094.89   |
 |        0.95 |        0.0967 |        0.8067 |              0.9885 |    1234.6    |
 
-## Cascata emb-qwen3emb → gpt-5.6-terra (n=900)
+## Cascade emb-qwen3emb → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -420,7 +420,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3522 |        0.8111 |              0.9685 |     885.475  |
 |        0.95 |        0.2267 |        0.8067 |              0.9755 |    1057.07   |
 
-## Cascata laya-finetuned → gpt-5.6-terra (n=900)
+## Cascade laya-finetuned → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -439,7 +439,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3611 |        0.8089 |              0.96   |      873.502 |
 |        0.95 |        0.2144 |        0.8067 |              0.9689 |     1073.95  |
 
-## Cascata laya-zeroshot → gpt-5.6-terra (n=900)
+## Cascade laya-zeroshot → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -458,7 +458,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1289 |        0.7922 |              0.7586 |     1190.9   |
 |        0.95 |        0.07   |        0.7978 |              0.7619 |     1271.39  |
 
-## Cascata llm-gemma4-12b-it-qat → gpt-5.6-terra (n=900)
+## Cascade llm-gemma4-12b-it-qat → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -477,7 +477,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.8578 |        0.7811 |              0.8005 |     202.219  |
 |        0.95 |        0.8178 |        0.79   |              0.8179 |     256.887  |
 
-## Cascata llm-qwen3.5-4b → gpt-5.6-terra (n=900)
+## Cascade llm-qwen3.5-4b → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -496,7 +496,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.3344 |        0.8011 |              0.897  |     913.921  |
 |        0.95 |        0.1967 |        0.8011 |              0.9096 |    1102.22   |
 
-## Cascata llm-qwen3.5-9b → gpt-5.6-terra (n=900)
+## Cascade llm-qwen3.5-9b → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -515,7 +515,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.4767 |        0.79   |              0.8671 |     721.487  |
 |        0.95 |        0.3389 |        0.7944 |              0.8885 |     909.789  |
 
-## Cascata modernbert-ft → gpt-5.6-terra (n=900)
+## Cascade modernbert-ft → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -534,7 +534,7 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.5144 |        0.82   |              0.9611 |     663.755  |
 |        0.95 |        0.3611 |        0.8111 |              0.9846 |     873.317  |
 
-## Cascata tfidf-logreg → gpt-5.6-terra (n=900)
+## Cascade tfidf-logreg → gpt-5.6-terra (n=900)
 
 |   threshold |   local_share |   product_acc |   local_acc_on_kept |   usd_per_1M |
 |------------:|--------------:|--------------:|--------------------:|-------------:|
@@ -553,34 +553,34 @@ Custo local = energia (170 W GPU / 65 W CPU, US$ 0.15/kWh) no throughput em lote
 |        0.9  |        0.1133 |        0.8044 |              0.9804 |     1211.81  |
 |        0.95 |        0.0444 |        0.8056 |              1      |     1305.96  |
 
-## Resumo: melhor ponto de cada cascata (threshold com maior acurácia final)
+## Summary: best point of each cascade (threshold with the highest final accuracy)
 
-| local                 | reserva       |   melhor_threshold |   local_share |   product_acc |   usd_per_1M |   reserva_sozinha_acc |   reserva_sozinha_usd_per_1M |
-|:----------------------|:--------------|-------------------:|--------------:|--------------:|-------------:|----------------------:|-----------------------------:|
-| emb-qwen3emb          | gpt-5.6-luna  |               0.65 |        0.68   |        0.825  |      43.8891 |                0.7917 |                      136.677 |
-| modernbert-ft         | gpt-5.6-terra |               0.8  |        0.6633 |        0.8244 |     460.267  |                0.8056 |                     1366.71  |
-| modernbert-ft         | gpt-5.6-luna  |               0.75 |        0.6967 |        0.8233 |      41.6014 |                0.7917 |                      136.677 |
-| laya-finetuned        | gpt-5.6-terra |               0.6  |        0.6333 |        0.8233 |     501.454  |                0.8056 |                     1366.71  |
-| emb-qwen3emb          | gpt-5.6-terra |               0.6  |        0.7211 |        0.8222 |     381.312  |                0.8056 |                     1366.71  |
-| emb-granite-r2        | gpt-5.6-terra |               0.6  |        0.6211 |        0.82   |     517.841  |                0.8056 |                     1366.71  |
-| tfidf-logreg          | gpt-5.6-terra |               0.5  |        0.6278 |        0.8189 |     508.719  |                0.8056 |                     1366.71  |
-| tfidf-logreg          | gpt-5.6-luna  |               0.5  |        0.6133 |        0.8183 |      52.8486 |                0.7917 |                      136.677 |
-| laya-finetuned        | gpt-5.6-luna  |               0.5  |        0.7144 |        0.8144 |      39.3568 |                0.7917 |                      136.677 |
-| emb-qwen3emb          | gpt-5.4-mini  |               0.65 |        0.68   |        0.8122 |     163.942  |                0.7711 |                      511.842 |
-| modernbert-ft         | gpt-5.4-mini  |               0.75 |        0.6967 |        0.8117 |     155.401  |                0.7711 |                      511.842 |
-| emb-granite-r2        | gpt-5.6-luna  |               0.5  |        0.7311 |        0.8117 |      36.7617 |                0.7917 |                      136.677 |
-| tfidf-logreg          | gpt-5.4-mini  |               0.5  |        0.6133 |        0.8061 |     197.912  |                0.7711 |                      511.842 |
-| emb-granite-r2        | gpt-5.4-mini  |               0.5  |        0.7311 |        0.8028 |     137.639  |                0.7711 |                      511.842 |
-| laya-finetuned        | gpt-5.4-mini  |               0.4  |        0.785  |        0.8028 |     110.374  |                0.7711 |                      511.842 |
-| llm-qwen3.5-4b        | gpt-5.6-terra |               0.9  |        0.3344 |        0.8011 |     913.921  |                0.8056 |                     1366.71  |
-| laya-zeroshot         | gpt-5.6-terra |               0.95 |        0.07   |        0.7978 |    1271.39   |                0.8056 |                     1366.71  |
-| llm-qwen3.5-9b        | gpt-5.6-terra |               0.95 |        0.3389 |        0.7944 |     909.789  |                0.8056 |                     1366.71  |
-| llm-gemma4-12b-it-qat | gpt-5.6-terra |               0.95 |        0.8178 |        0.79   |     256.887  |                0.8056 |                     1366.71  |
-| llm-qwen3.5-4b        | gpt-5.6-luna  |               0.95 |        0.2156 |        0.7878 |     111.517  |                0.7917 |                      136.677 |
-| llm-gemma4-12b-it-qat | gpt-5.6-luna  |               0.95 |        0.8139 |        0.7872 |      33.28   |                0.7917 |                      136.677 |
-| llm-qwen3.5-9b        | gpt-5.6-luna  |               0.95 |        0.3472 |        0.7844 |      95.4636 |                0.7917 |                      136.677 |
-| laya-zeroshot         | gpt-5.6-luna  |               0.95 |        0.0689 |        0.7828 |     127.611  |                0.7917 |                      136.677 |
-| llm-gemma4-12b-it-qat | gpt-5.4-mini  |               0.9  |        0.8594 |        0.7733 |      79.7851 |                0.7711 |                      511.842 |
-| llm-qwen3.5-4b        | gpt-5.4-mini  |               0.95 |        0.2156 |        0.7672 |     405.813  |                0.7711 |                      511.842 |
-| llm-qwen3.5-9b        | gpt-5.4-mini  |               0.95 |        0.3472 |        0.7644 |     340.363  |                0.7711 |                      511.842 |
-| laya-zeroshot         | gpt-5.4-mini  |               0.95 |        0.0689 |        0.7628 |     476.932  |                0.7711 |                      511.842 |
+| local                 | fallback      |   best_threshold |   local_share |   product_acc |   usd_per_1M |   fallback_alone_acc |   fallback_alone_usd_per_1M |
+|:----------------------|:--------------|-----------------:|--------------:|--------------:|-------------:|---------------------:|----------------------------:|
+| emb-qwen3emb          | gpt-5.6-luna  |             0.65 |        0.68   |        0.825  |      43.8891 |               0.7917 |                     136.677 |
+| modernbert-ft         | gpt-5.6-terra |             0.8  |        0.6633 |        0.8244 |     460.267  |               0.8056 |                    1366.71  |
+| modernbert-ft         | gpt-5.6-luna  |             0.75 |        0.6967 |        0.8233 |      41.6014 |               0.7917 |                     136.677 |
+| laya-finetuned        | gpt-5.6-terra |             0.6  |        0.6333 |        0.8233 |     501.454  |               0.8056 |                    1366.71  |
+| emb-qwen3emb          | gpt-5.6-terra |             0.6  |        0.7211 |        0.8222 |     381.312  |               0.8056 |                    1366.71  |
+| emb-granite-r2        | gpt-5.6-terra |             0.6  |        0.6211 |        0.82   |     517.841  |               0.8056 |                    1366.71  |
+| tfidf-logreg          | gpt-5.6-terra |             0.5  |        0.6278 |        0.8189 |     508.719  |               0.8056 |                    1366.71  |
+| tfidf-logreg          | gpt-5.6-luna  |             0.5  |        0.6133 |        0.8183 |      52.8486 |               0.7917 |                     136.677 |
+| laya-finetuned        | gpt-5.6-luna  |             0.5  |        0.7144 |        0.8144 |      39.3568 |               0.7917 |                     136.677 |
+| emb-qwen3emb          | gpt-5.4-mini  |             0.65 |        0.68   |        0.8122 |     163.942  |               0.7711 |                     511.842 |
+| modernbert-ft         | gpt-5.4-mini  |             0.75 |        0.6967 |        0.8117 |     155.401  |               0.7711 |                     511.842 |
+| emb-granite-r2        | gpt-5.6-luna  |             0.5  |        0.7311 |        0.8117 |      36.7617 |               0.7917 |                     136.677 |
+| tfidf-logreg          | gpt-5.4-mini  |             0.5  |        0.6133 |        0.8061 |     197.912  |               0.7711 |                     511.842 |
+| emb-granite-r2        | gpt-5.4-mini  |             0.5  |        0.7311 |        0.8028 |     137.639  |               0.7711 |                     511.842 |
+| laya-finetuned        | gpt-5.4-mini  |             0.4  |        0.785  |        0.8028 |     110.374  |               0.7711 |                     511.842 |
+| llm-qwen3.5-4b        | gpt-5.6-terra |             0.9  |        0.3344 |        0.8011 |     913.921  |               0.8056 |                    1366.71  |
+| laya-zeroshot         | gpt-5.6-terra |             0.95 |        0.07   |        0.7978 |    1271.39   |               0.8056 |                    1366.71  |
+| llm-qwen3.5-9b        | gpt-5.6-terra |             0.95 |        0.3389 |        0.7944 |     909.789  |               0.8056 |                    1366.71  |
+| llm-gemma4-12b-it-qat | gpt-5.6-terra |             0.95 |        0.8178 |        0.79   |     256.887  |               0.8056 |                    1366.71  |
+| llm-qwen3.5-4b        | gpt-5.6-luna  |             0.95 |        0.2156 |        0.7878 |     111.517  |               0.7917 |                     136.677 |
+| llm-gemma4-12b-it-qat | gpt-5.6-luna  |             0.95 |        0.8139 |        0.7872 |      33.28   |               0.7917 |                     136.677 |
+| llm-qwen3.5-9b        | gpt-5.6-luna  |             0.95 |        0.3472 |        0.7844 |      95.4636 |               0.7917 |                     136.677 |
+| laya-zeroshot         | gpt-5.6-luna  |             0.95 |        0.0689 |        0.7828 |     127.611  |               0.7917 |                     136.677 |
+| llm-gemma4-12b-it-qat | gpt-5.4-mini  |             0.9  |        0.8594 |        0.7733 |      79.7851 |               0.7711 |                     511.842 |
+| llm-qwen3.5-4b        | gpt-5.4-mini  |             0.95 |        0.2156 |        0.7672 |     405.813  |               0.7711 |                     511.842 |
+| llm-qwen3.5-9b        | gpt-5.4-mini  |             0.95 |        0.3472 |        0.7644 |     340.363  |               0.7711 |                     511.842 |
+| laya-zeroshot         | gpt-5.4-mini  |             0.95 |        0.0689 |        0.7628 |     476.932  |               0.7711 |                     511.842 |

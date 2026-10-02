@@ -1,4 +1,4 @@
-"""Gera 07_eda.ipynb (análise exploratória). Executar: jupyter nbconvert --execute --inplace 07_eda.ipynb"""
+"""Generates 07_eda.ipynb (exploratory analysis). Run: jupyter nbconvert --execute --inplace 07_eda.ipynb"""
 import nbformat as nbf
 
 nb = nbf.v4.new_notebook()
@@ -7,18 +7,18 @@ md = lambda s: C.append(nbf.v4.new_markdown_cell(s.strip()))
 code = lambda s: C.append(nbf.v4.new_code_cell(s.strip()))
 
 md("""
-# Análise exploratória — triagem de reclamações financeiras (CFPB)
+# Exploratory analysis — financial complaint triage (CFPB)
 
-Objetivo: entender os dados **antes** de rodar Laya/fine-tuning, para que a análise final tenha
-contexto. Nada aqui chama API paga; o que é "modelo" neste notebook é só um baseline clássico
-(TF-IDF + regressão logística, segundos em CPU) e a leitura dos resultados do GPT que já existem.
+Goal: understand the data **before** running Laya/fine-tuning, so the final analysis has
+context. Nothing here calls a paid API; the only "model" in this notebook is a classic baseline
+(TF-IDF + logistic regression, seconds on CPU) plus a read of the GPT results that already exist.
 
-Perguntas que o notebook responde:
-1. Como é a base real vs. a amostra do experimento (volume, filas, fraude, cartas-modelo)?
-2. Quanto texto cabe no orçamento de tokens do Laya — ele vai decidir "sem ler" parte da reclamação?
-3. A tarefa é separável por vocabulário? Um modelo clássico barato já resolve?
-4. Onde o GPT erra, e as probabilidades dele são calibradas (importante para a cascata)?
-5. O que isso implica para o desenho do experimento e para o post.
+Questions this notebook answers:
+1. How does the real dataset compare with the experiment sample (volume, queues, fraud, template letters)?
+2. How much text fits in Laya's token budget — will it decide "without reading" part of the complaint?
+3. Is the task separable by vocabulary? Does a cheap classic model already solve it?
+4. Where does GPT go wrong, and are its probabilities calibrated (important for the cascade)?
+5. What this implies for the experiment design and for the post.
 """)
 
 code("""
@@ -35,7 +35,7 @@ from common import PRODUCTS, QUESTIONS, MAX_CHARS, map_product, fraud_label
 warnings.filterwarnings("ignore")
 pd.set_option("display.width", 160, "display.max_colwidth", 120)
 
-# paleta de referência (dataviz skill): azul = série principal, laranja = comparação
+# reference palette (dataviz skill): blue = main series, orange = comparison
 BLUE, ORANGE, INK, MUTED = "#2a78d6", "#eb6834", "#0b0b0b", "#52514e"
 plt.rcParams.update({"figure.dpi": 110, "axes.spines.top": False, "axes.spines.right": False,
                      "axes.edgecolor": MUTED, "axes.labelcolor": INK, "xtick.color": MUTED,
@@ -46,10 +46,10 @@ QUEUES = list(PRODUCTS)
 test = pd.read_parquet("data/test.parquet")
 train = pd.read_parquet("data/train.parquet")
 raw = pd.read_parquet("data/cfpb_2023plus.parquet")
-print(f"bruto 2023+ com narrativa: {len(raw):,} | treino {len(train):,} | teste {len(test):,}")
+print(f"raw 2023+ with narrative: {len(raw):,} | train {len(train):,} | test {len(test):,}")
 """)
 
-md("## 1. Base real vs. amostra — e o problema das cartas-modelo")
+md("## 1. Real dataset vs. sample — and the template-letter problem")
 
 code("""
 raw["queue"] = [map_product(p, s) for p, s in zip(raw["product"], raw["sub_product"])]
@@ -58,50 +58,50 @@ txt = raw["consumer_complaint_narrative"]
 key = txt.str.lower().map(lambda t: re.sub(r"[^a-z]+", " ", t)[:300])
 raw["template_dup"] = key.duplicated(keep=False)
 
-print(f"textos que são cópia (quase) exata de outro: {raw.template_dup.mean():.1%}")
-print(f"  em credit_reporting: {raw.loc[raw['queue']=='credit_reporting','template_dup'].mean():.1%}")
-print(f"  nas demais filas:    {raw.loc[raw['queue']!='credit_reporting','template_dup'].mean():.1%}")
+print(f"texts that are a (near-)exact copy of another: {raw.template_dup.mean():.1%}")
+print(f"  in credit_reporting: {raw.loc[raw['queue']=='credit_reporting','template_dup'].mean():.1%}")
+print(f"  in the other queues: {raw.loc[raw['queue']!='credit_reporting','template_dup'].mean():.1%}")
 top = key[raw.template_dup].value_counts().head(5)
-print("\\nInícios mais repetidos (cartas de 'limpa nome' / credit repair):")
+print("\\nMost repeated openings (credit repair letters):")
 for k, n in top.items():
     print(f"  {n:>6,}x  {k[:110]}...")
 """)
 
 code("""
 real = raw.dropna(subset=["queue"])
-dist = pd.DataFrame({"base real (2023+)": real["queue"].value_counts(normalize=True),
-                     "teste do experimento": test["queue"].value_counts(normalize=True)}).loc[QUEUES]
+dist = pd.DataFrame({"real dataset (2023+)": real["queue"].value_counts(normalize=True),
+                     "experiment test set": test["queue"].value_counts(normalize=True)}).loc[QUEUES]
 fig, ax = plt.subplots(figsize=(8, 3.6))
 y = np.arange(len(QUEUES))
 ax.barh(y - .2, dist.iloc[:, 0], .38, color=BLUE, label=dist.columns[0])
 ax.barh(y + .2, dist.iloc[:, 1], .38, color=ORANGE, label=dist.columns[1])
 ax.set_yticks(y, QUEUES); ax.invert_yaxis(); ax.xaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
-ax.set_title("Participação de cada fila: base real × teste balanceado", loc="left", color=INK)
+ax.set_title("Share of each queue: real dataset × balanced test set", loc="left", color=INK)
 ax.legend(frameon=False, loc="lower right"); plt.tight_layout(); plt.show()
 dist.style.format("{:.1%}")
 """)
 
 md("""
-**Leitura:** na base real, *credit_reporting* domina e boa parte dela é carta-modelo repetida.
-O teste é balanceado (200 por fila) de propósito — senão "acertar a fila" viraria "chutar
-credit_reporting". Na hora de projetar custo para produção, o volume real importa (seção 7).
+**Reading:** in the real dataset, *credit_reporting* dominates and a good part of it is repeated template letters.
+The test set is balanced (200 per queue) on purpose — otherwise "getting the queue right" would turn into "guessing
+credit_reporting". When projecting production cost, the real volume matters (section 7).
 """)
 
 code("""
 fr = pd.DataFrame({
-    "fraude na base real": real.dropna(subset=["fraud"]).groupby("queue")["fraud"].mean(),
-    "fraude no teste": test.groupby("queue")["fraud"].mean(),
-    "positivos no teste": test.groupby("queue")["fraud"].sum()}).loc[QUEUES]
-fr.style.format({"fraude na base real": "{:.1%}", "fraude no teste": "{:.1%}", "positivos no teste": "{:.0f}"})
+    "fraud in real dataset": real.dropna(subset=["fraud"]).groupby("queue")["fraud"].mean(),
+    "fraud in test set": test.groupby("queue")["fraud"].mean(),
+    "positives in test set": test.groupby("queue")["fraud"].sum()}).loc[QUEUES]
+fr.style.format({"fraud in real dataset": "{:.1%}", "fraud in test set": "{:.1%}", "positives in test set": "{:.0f}"})
 """)
 
 md("""
-**Leitura:** fraude se concentra em *money_transfer* (golpes em apps de pagamento) e
-*debt_collection* (dívida gerada por roubo de identidade). Em *mortgage* e *personal_loan*
-não há positivos — nessas filas a pergunta de fraude só pode errar para o lado do falso positivo.
+**Reading:** fraud is concentrated in *money_transfer* (payment-app scams) and
+*debt_collection* (debt created by identity theft). *mortgage* and *personal_loan* have
+no positives — in those queues the fraud question can only err on the false-positive side.
 """)
 
-md("## 2. Tamanho do texto × orçamento de tokens do Laya")
+md("## 2. Text length × Laya's token budget")
 
 code("""
 mdir = snapshot_download("convaiinnovations/laya", allow_patterns=["tokenizer/*", "rl_agent_config.json"])
@@ -130,26 +130,26 @@ tb.describe(percentiles=[.25, .5, .75, .9]).round(1)
 code("""
 fig, axes = plt.subplots(1, 2, figsize=(10, 3.4))
 axes[0].hist(tb.tokens_full.clip(upper=1500), bins=50, color=BLUE)
-for x, lab, h in [(tb.used_product.max(), "limite do Laya\\n(pergunta de fila)", .88), (tb.tokens_1500c.max(), "corte de\\n1.500 caracteres", .62)]:
+for x, lab, h in [(tb.used_product.max(), "Laya limit\\n(queue question)", .88), (tb.tokens_1500c.max(), "1,500-character\\ncut", .62)]:
     axes[0].axvline(x, color=INK, lw=1, ls="--"); axes[0].text(x + 20, axes[0].get_ylim()[1] * h, lab, color=INK, fontsize=8, va="top")
-axes[0].set_title("Tokens por reclamação (texto completo)", loc="left", color=INK); axes[0].set_xlabel("tokens (cortado em 1.500)")
+axes[0].set_title("Tokens per complaint (full text)", loc="left", color=INK); axes[0].set_xlabel("tokens (clipped at 1,500)")
 axes[1].hist(tb.share_seen_product.clip(upper=1), bins=40, color=BLUE)
-axes[1].set_title("Fração do texto que o Laya efetivamente lê", loc="left", color=INK)
+axes[1].set_title("Share of the text Laya actually reads", loc="left", color=INK)
 axes[1].xaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
 plt.tight_layout(); plt.show()
-print(f"Laya lê o texto inteiro em {(tb.share_seen_product >= .999).mean():.1%} das reclamações")
-print(f"Laya lê menos da metade em {(tb.share_seen_product < .5).mean():.1%}")
-print(f"Tokens de estado disponíveis — fila: {tb.used_product.max()} | fraude: {tb.used_fraud.max()}")
+print(f"Laya reads the whole text in {(tb.share_seen_product >= .999).mean():.1%} of complaints")
+print(f"Laya reads less than half in {(tb.share_seen_product < .5).mean():.1%}")
+print(f"State tokens available — queue: {tb.used_product.max()} | fraud: {tb.used_fraud.max()}")
 """)
 
 md("""
-**Leitura:** o orçamento de estado do Laya é curto (512 tokens menos a pergunta e as 9 opções).
-Reclamações longas são decididas lendo só o começo. Isso importa para a análise: se o Laya errar
-mais nos textos longos, a causa pode ser orçamento, não "inteligência". O GPT recebeu os mesmos
-1.500 caracteres, então a comparação é justa no corte de caracteres, mas não no de tokens.
+**Reading:** Laya's state budget is short (512 tokens minus the question and the 9 options).
+Long complaints are decided by reading only the beginning. This matters for the analysis: if Laya errs
+more on long texts, the cause may be the budget, not "intelligence". GPT received the same
+1,500 characters, so the comparison is fair on the character cut, but not on the token cut.
 """)
 
-md("## 3. Qualidade do texto: redações e ruído")
+md("## 3. Text quality: redactions and noise")
 
 code("""
 def redaction_share(t):
@@ -157,35 +157,35 @@ def redaction_share(t):
     return sum(bool(re.fullmatch(r"[X/{}$.,()\\d]*X{2,}[X/{}$.,()\\d]*", w)) for w in words) / max(1, len(words))
 test["redacted"] = test.text.map(redaction_share)
 print(test.redacted.describe(percentiles=[.5, .9, .99]).round(3))
-print("\\nExemplo curto por fila:")
+print("\\nShort example per queue:")
 for q in QUEUES:
     s = test[test["queue"] == q].sort_values("text", key=lambda s: s.str.len()).iloc[len(test[test["queue"] == q]) // 4]
-    print(f"\\n[{q}] fraude={s.fraud} | {s.issue} / {s.sub_issue}\\n  {s.text[:260]}")
+    print(f"\\n[{q}] fraud={s.fraud} | {s.issue} / {s.sub_issue}\\n  {s.text[:260]}")
 """)
 
-md("## 4. A tarefa é separável por vocabulário?")
+md("## 4. Is the task separable by vocabulary?")
 
 code("""
 vec = TfidfVectorizer(ngram_range=(1, 2), min_df=3, max_features=50000, sublinear_tf=True,
-                      token_pattern=r"(?u)\\b[a-wyz][a-z]{2,}\\b")  # ignora XXXX
+                      token_pattern=r"(?u)\\b[a-wyz][a-z]{2,}\\b")  # ignores XXXX
 Xtr = vec.fit_transform(train.text.str[:MAX_CHARS]); Xte = vec.transform(test.text.str[:MAX_CHARS])
 terms = np.array(vec.get_feature_names_out())
 
 clf_q = LogisticRegression(max_iter=2000, C=5).fit(Xtr, train["queue"])
 top_terms = {q: ", ".join(terms[np.argsort(clf_q.coef_[i])[::-1][:10]]) for i, q in enumerate(clf_q.classes_)}
-pd.Series(top_terms, name="termos mais indicativos").to_frame()
+pd.Series(top_terms, name="most indicative terms").to_frame()
 """)
 
 code("""
 clf_f = LogisticRegression(max_iter=2000, C=5, class_weight="balanced").fit(Xtr, train["fraud"])
-print("termos que mais indicam fraude:", ", ".join(terms[np.argsort(clf_f.coef_[0])[::-1][:20]]))
+print("terms that most indicate fraud:", ", ".join(terms[np.argsort(clf_f.coef_[0])[::-1][:20]]))
 """)
 
 md("""
-### Baseline de referência: TF-IDF + regressão logística
+### Reference baseline: TF-IDF + logistic regression
 
-Não é um braço do post — é o **piso**. Treina em segundos em CPU com os mesmos 3.600 exemplos que
-o fine-tuning do Laya vai usar. Se o Laya fine-tuned não bater isto, a conclusão muda.
+Not an arm of the post — it is the **floor**. It trains in seconds on CPU with the same 3,600 examples
+that Laya's fine-tuning will use. If fine-tuned Laya doesn't beat this, the conclusion changes.
 """)
 
 code("""
@@ -195,7 +195,7 @@ base = {"product_acc": accuracy_score(test["queue"], pq), "product_f1_macro": f1
 pd.Series(base).round(3)
 """)
 
-md("## 5. Onde o GPT erra (resultados já pagos, só leitura)")
+md("## 5. Where GPT goes wrong (already-paid results, read only)")
 
 code("""
 llm = {m: test.merge(pd.read_parquet(f"results/llm_{m}.parquet"), on="id") for m in ["gpt-5.4-nano", "gpt-5.4-mini"]}
@@ -208,8 +208,8 @@ for i in range(9):
     for j in range(9):
         if cm.iat[i, j] >= .05:
             ax.text(j, i, f"{cm.iat[i, j]:.0%}", ha="center", va="center", fontsize=7, color="white" if cm.iat[i, j] > .5 else INK)
-ax.set_xlabel("previsto pelo gpt-5.4-mini"); ax.set_ylabel("rótulo CFPB")
-ax.set_title("Matriz de confusão (linha = 100%)", loc="left", color=INK); plt.tight_layout(); plt.show()
+ax.set_xlabel("predicted by gpt-5.4-mini"); ax.set_ylabel("CFPB label")
+ax.set_title("Confusion matrix (row = 100%)", loc="left", color=INK); plt.tight_layout(); plt.show()
 """)
 
 code("""
@@ -222,107 +222,107 @@ code("""
 nano = llm["gpt-5.4-nano"]
 both = mini.merge(nano[["id", "llm_product"]], on="id", suffixes=("_mini", "_nano"))
 agree = both.llm_product_mini == both.llm_product_nano
-print(f"nano e mini concordam em {agree.mean():.1%} das reclamações")
-print(f"  quando concordam, acertam {(both.llm_product_mini[agree] == both['queue'][agree]).mean():.1%}")
-print(f"  quando discordam, o mini acerta {(both.llm_product_mini[~agree] == both['queue'][~agree]).mean():.1%}")
+print(f"nano and mini agree on {agree.mean():.1%} of complaints")
+print(f"  when they agree, they are right {(both.llm_product_mini[agree] == both['queue'][agree]).mean():.1%}")
+print(f"  when they disagree, mini is right {(both.llm_product_mini[~agree] == both['queue'][~agree]).mean():.1%}")
 
-mini["len_bucket"] = pd.qcut(mini.text.str.len(), 4, labels=["curto", "médio", "longo", "muito longo"])
-mini.groupby("len_bucket").apply(lambda g: pd.Series({"acc_fila": (g["queue"] == g.llm_product).mean(),
-                                                     "n": len(g), "chars_mediana": g.text.str.len().median()})).round(3)
+mini["len_bucket"] = pd.qcut(mini.text.str.len(), 4, labels=["short", "medium", "long", "very long"])
+mini.groupby("len_bucket").apply(lambda g: pd.Series({"queue_acc": (g["queue"] == g.llm_product).mean(),
+                                                     "n": len(g), "median_chars": g.text.str.len().median()})).round(3)
 """)
 
 md("""
-**Leitura sobre o teto:** parte do "erro" é do rótulo — o consumidor escolhe o produto no formulário
-e uma reclamação sobre cobrança de dívida que aparece no relatório de crédito pode legitimamente
-cair em qualquer das duas filas. Os pares mais confundidos acima delimitam esse teto.
+**Reading on the ceiling:** part of the "error" belongs to the label — the consumer picks the product on the form,
+and a complaint about debt collection that shows up on the credit report can legitimately
+land in either queue. The most-confused pairs above mark that ceiling.
 """)
 
-md("## 6. Probabilidade de fraude do GPT é calibrada? (base da cascata)")
+md("## 6. Is GPT's fraud probability calibrated? (basis for the cascade)")
 
 code("""
 fig, ax = plt.subplots(figsize=(4.6, 4.2))
-ax.plot([0, 1], [0, 1], color=MUTED, lw=1, ls="--", label="calibração perfeita")
+ax.plot([0, 1], [0, 1], color=MUTED, lw=1, ls="--", label="perfect calibration")
 for (m, d), c in zip(llm.items(), [ORANGE, BLUE]):
     b = pd.cut(d.llm_fraud_p, np.linspace(0, 1, 11), include_lowest=True)
     r = d.groupby(b).agg(p=("llm_fraud_p", "mean"), y=("fraud", "mean"), n=("fraud", "size")).dropna()
     ax.plot(r.p, r.y, marker="o", ms=5, lw=2, color=c, label=m)
-ax.set_xlabel("probabilidade declarada pelo modelo"); ax.set_ylabel("fração realmente fraude")
-ax.set_title("Curva de calibração — fraude", loc="left", color=INK); ax.legend(frameon=False); plt.tight_layout(); plt.show()
+ax.set_xlabel("probability stated by the model"); ax.set_ylabel("fraction actually fraud")
+ax.set_title("Calibration curve — fraud", loc="left", color=INK); ax.legend(frameon=False); plt.tight_layout(); plt.show()
 for m, d in llm.items():
-    print(m, "valores distintos de fraud_probability:", d.llm_fraud_p.round(2).nunique(), "| AUC", round(roc_auc_score(d.fraud, d.llm_fraud_p), 3))
+    print(m, "distinct fraud_probability values:", d.llm_fraud_p.round(2).nunique(), "| AUC", round(roc_auc_score(d.fraud, d.llm_fraud_p), 3))
 """)
 
 md("""
-**Leitura:** LLMs "falam" probabilidades redondas (0,1 / 0,9) — são poucas faixas distintas e
-normalmente mal calibradas. O argumento do Laya/Jev é justamente devolver probabilidade treinada
-com *proper scoring rule*. Se a curva do Laya ficar mais perto da diagonal, isso é um ponto
-concreto do post (limiar de confiança confiável = cascata que funciona).
+**Reading:** LLMs "verbalize" round probabilities (0.1 / 0.9) — only a few distinct levels, and
+usually poorly calibrated. The Laya/Jev argument is precisely to return a probability trained
+with a *proper scoring rule*. If Laya's curve sits closer to the diagonal, that is a concrete
+point for the post (reliable confidence threshold = a cascade that works).
 """)
 
-md("## 7. Latência e custo do LLM — e a projeção para volume real")
+md("## 7. LLM latency and cost — and the projection to real volume")
 
 code("""
 fig, ax = plt.subplots(figsize=(7, 3))
 for (m, d), c in zip(llm.items(), [ORANGE, BLUE]):
     ax.hist(d.llm_ms.clip(upper=5000), bins=60, alpha=.55, color=c, label=m)
-ax.set_xlabel("latência por reclamação (ms, cortado em 5s)"); ax.legend(frameon=False)
-ax.set_title("Latência do LLM (1 chamada por reclamação)", loc="left", color=INK); plt.tight_layout(); plt.show()
+ax.set_xlabel("latency per complaint (ms, clipped at 5s)"); ax.legend(frameon=False)
+ax.set_title("LLM latency (1 call per complaint)", loc="left", color=INK); plt.tight_layout(); plt.show()
 
-cost = pd.DataFrame({m: {"tokens_in_médio": d.tok_in.mean(), "tokens_out_médio": d.tok_out.mean(),
-                         "US$_por_1M_reclamações": d.cost_usd.mean() * 1e6,
+cost = pd.DataFrame({m: {"mean_tokens_in": d.tok_in.mean(), "mean_tokens_out": d.tok_out.mean(),
+                         "US$_per_1M_complaints": d.cost_usd.mean() * 1e6,
                          "p50_ms": d.llm_ms.median(), "p95_ms": d.llm_ms.quantile(.95)} for m, d in llm.items()}).T
 cost.round(1)
 """)
 
 code("""
-# ordem de grandeza: volume anual de reclamações na CFPB (base real, todas as filas, 2023)
+# order of magnitude: annual CFPB complaint volume (real dataset, all queues, 2023)
 vol_2023 = (raw.date.dt.year == 2023).sum()
-print(f"reclamações com narrativa publicadas em 2023: {vol_2023:,}")
+print(f"complaints with narrative published in 2023: {vol_2023:,}")
 for m in cost.index:
-    print(f"  {m}: US$ {cost.loc[m, 'US$_por_1M_reclamações'] * vol_2023 / 1e6:,.0f} por ano só para triar (2 decisões)")
+    print(f"  {m}: US$ {cost.loc[m, 'US$_per_1M_complaints'] * vol_2023 / 1e6:,.0f} per year just for triage (2 decisions)")
 """)
 
 md("""
-## 8. Implicações para o experimento e para o post
+## 8. Implications for the experiment and for the post
 
-Números desta execução (29/09/2026):
+Numbers from this run (2026-09-29):
 
-1. **Cartas-modelo dominam a base real.** 58,7% das reclamações 2023+ são cópia (quase) exata de
-   outra — 71,5% em *credit_reporting* (cartas de "limpa nome"). Sem deduplicar, qualquer modelo
-   "acerta" decorando template e a métrica infla. Já removidas do experimento.
+1. **Template letters dominate the real dataset.** 58.7% of 2023+ complaints are a (near-)exact copy of
+   another — 71.5% in *credit_reporting* (credit repair letters). Without deduplication, any model
+   "gets it right" by memorizing templates and the metric is inflated. Already removed from the experiment.
 
-2. **O piso é alto: TF-IDF + regressão logística empata com o GPT-5.4-mini.** Com os mesmos 3.600
-   exemplos que o Laya vai usar no fine-tuning, em segundos de CPU: 77,2% na fila (mini: 77,1%),
-   AUC de fraude 0,865 (mini: 0,868). A comparação justa do Laya fine-tuned é contra *este* piso,
-   não só contra o LLM zero-shot. Isso vira argumento do post: "antes da arquitetura nova, o
-   baseline de 20 linhas".
+2. **The floor is high: TF-IDF + logistic regression ties with GPT-5.4-mini.** With the same 3,600
+   examples Laya will use for fine-tuning, in seconds of CPU: 77.2% on the queue (mini: 77.1%),
+   fraud AUC 0.865 (mini: 0.868). The fair comparison for fine-tuned Laya is against *this* floor,
+   not only against the zero-shot LLM. This becomes an argument for the post: "before the new architecture,
+   the 20-line baseline".
 
-3. **O teto é baixo por causa do rótulo.** Os erros se concentram em pares legítimos:
-   *debt_collection → credit_reporting* (dívida que aparece no relatório), *credit_card →
-   credit_reporting*, *money_transfer → checking_savings*. Filas com vocabulário próprio
-   (*mortgage*, *student_loan*) passam de 95%. O ganho possível está em ~4 filas.
+3. **The ceiling is low because of the label.** Errors concentrate in legitimate pairs:
+   *debt_collection → credit_reporting* (debt that shows up on the report), *credit_card →
+   credit_reporting*, *money_transfer → checking_savings*. Queues with their own vocabulary
+   (*mortgage*, *student_loan*) exceed 95%. The possible gain lies in ~4 queues.
 
-4. **Orçamento de tokens do Laya é real, mas não dominante.** Ele lê o texto inteiro em 73,6% das
-   reclamações; menos da metade em 7,8%. Porém o GPT acerta *mais* nos textos longos (83% vs 73%
-   nos curtos) — justamente onde o Laya corta. Analisar o Laya por faixa de tamanho.
+4. **Laya's token budget is real, but not dominant.** It reads the whole text in 73.6% of
+   complaints; less than half in 7.8%. However, GPT is *more* accurate on long texts (83% vs 73%
+   on short ones) — exactly where Laya truncates. Analyze Laya by length bucket.
 
-5. **GPT é superconfiante em fraude.** Quando declara ~0,9, a fração real de fraude é ~0,6–0,7;
-   quando declara ~0,6, é ~0,2. Probabilidade de LLM não serve como limiar de cascata sem
-   recalibração. É aqui que o Laya (treinado com *proper scoring rule* + temperatura) pode ganhar
-   de forma demonstrável — e é o ponto mais "sênior" do post.
+5. **GPT is overconfident on fraud.** When it states ~0.9, the actual fraud fraction is ~0.6–0.7;
+   when it states ~0.6, it is ~0.2. An LLM's probability can't serve as a cascade threshold without
+   recalibration. This is where Laya (trained with a *proper scoring rule* + temperature) can win
+   demonstrably — and it is the most "senior" point of the post.
 
-6. **Concordância nano × mini é um sinal de confiança barato:** concordam em 82,7% e, quando
-   concordam, acertam 82,3%; quando discordam, o mini acerta 52,4%.
+6. **nano × mini agreement is a cheap confidence signal:** they agree on 82.7% and, when
+   they agree, are right 82.3%; when they disagree, mini is right 52.4%.
 
-7. **Custo, na escala da CFPB, não é o argumento.** Triar ~414 mil reclamações/ano custaria
-   US$ 57 (nano) a US$ 212 (mini). O argumento de custo só aparece em volume de milhões por dia
-   (transações, mensagens de app, eventos de fraude). Para *reclamações*, os argumentos fortes são
-   **latência** (~1 s p50 e 2,4–3,2 s p95 do LLM vs. dezenas de ms), **calibração** e **dado que
-   não sai de casa** (regulado: LGPD, sigilo bancário). O post deve dizer isso explicitamente — e
-   projetar o custo para um cenário de alto volume em vez de vender economia onde ela é irrelevante.
+7. **At CFPB scale, cost is not the argument.** Triaging ~414 thousand complaints/year would cost
+   US$ 57 (nano) to US$ 212 (mini). The cost argument only shows up at volumes of millions per day
+   (transactions, app messages, fraud events). For *complaints*, the strong arguments are
+   **latency** (~1 s p50 and 2.4–3.2 s p95 for the LLM vs. tens of ms), **calibration** and **data that
+   never leaves the premises** (regulated: LGPD, banking secrecy). The post should say this explicitly — and
+   project cost for a high-volume scenario instead of selling savings where they are irrelevant.
 """)
 
 nb.cells = C
 nb.metadata["kernelspec"] = {"name": "python3", "display_name": "Python 3 (post-laya venv)", "language": "python"}
 nbf.write(nb, "07_eda.ipynb")
-print("07_eda.ipynb gerado")
+print("07_eda.ipynb generated")

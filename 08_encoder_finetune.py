@@ -1,11 +1,11 @@
-"""Controle do Laya: ModernBERT-large (a mesma base do Laya inglês) ajustado do jeito tradicional.
+"""Laya control: ModernBERT-large (the same base as English Laya) fine-tuned the traditional way.
 
-Um encoder, duas cabeças lineares (fila: 9 classes; fraude: 2 classes), cross-entropy somada,
-mesmos 3.600 exemplos e mesma fatia de calibração (temperatura por cabeça) do 05_finetune.py.
-Se empatar com o Laya fine-tuned, o ganho vem do encoder, não do método RLCD.
+One encoder, two linear heads (queue: 9 classes; fraud: 2 classes), summed cross-entropy,
+the same 3,600 examples and the same calibration slice (per-head temperature) as 05_finetune.py.
+If it ties with fine-tuned Laya, the gain comes from the encoder, not from the RLCD method.
 
-Uso: .venv/bin/python 08_encoder_finetune.py [modelo_hf]   (default: answerdotai/ModernBERT-large)
-Grava results/sys_modernbert-ft.parquet e models/modernbert-cfpb/. Custo: zero (GPU local).
+Usage: .venv/bin/python 08_encoder_finetune.py [hf_model]   (default: answerdotai/ModernBERT-large)
+Writes results/sys_modernbert-ft.parquet and models/modernbert-cfpb/. Cost: zero (local GPU).
 """
 import os, random, sys, time
 import numpy as np
@@ -20,10 +20,10 @@ import sysio
 MODEL_ID = sys.argv[1] if len(sys.argv) > 1 else "answerdotai/ModernBERT-large"
 OUT_DIR = "models/smoke-modernbert" if sysio.SMOKE else "models/modernbert-cfpb"
 SEED = 20260929
-MAX_LEN = 512           # mesmo teto de tokens do Laya (que ainda gasta parte com pergunta e opções)
-EPOCHS, MICRO_BATCH, GRAD_ACCUM = (1 if sysio.SMOKE else 3), 8, 4   # batch efetivo 32
+MAX_LEN = 512           # same token cap as Laya (which also spends part of it on the question and options)
+EPOCHS, MICRO_BATCH, GRAD_ACCUM = (1 if sysio.SMOKE else 3), 8, 4   # effective batch 32
 LR_ENCODER, LR_HEAD = 3e-5, 1e-3
-CALIB_N = 20 if sysio.SMOKE else 200           # reclamações fora do treino para calibração (igual ao Laya: 400 itens / 2 perguntas)
+CALIB_N = 20 if sysio.SMOKE else 200           # complaints held out of training for calibration (same as Laya: 400 items / 2 questions)
 QUEUES = list(PRODUCTS)
 
 
@@ -79,7 +79,7 @@ def predict(model, tok, df, device, bs=32):
 
 
 def main():
-    assert torch.cuda.is_available(), "sem CUDA — ver RUNBOOK.md (nvidia_uvm)"
+    assert torch.cuda.is_available(), "no CUDA — see Troubleshooting in README.md"
     device = torch.device("cuda")
     random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 
@@ -114,20 +114,20 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
             if step % 100 == 0:
-                print(f"  época {epoch+1} passo {step} loss {loss.item()*GRAD_ACCUM:.4f}", flush=True)
-        print(f"=== época {epoch+1} ok em {time.time()-t0:.0f}s", flush=True)
+                print(f"  epoch {epoch+1} step {step} loss {loss.item()*GRAD_ACCUM:.4f}", flush=True)
+        print(f"=== epoch {epoch+1} done in {time.time()-t0:.0f}s", flush=True)
 
-    # calibração de temperatura por cabeça, na fatia que não treinou
+    # per-head temperature calibration on the held-out slice
     cp, cf = predict(model, tok, calib, device)
     t_prod = fit_temperature(cp, torch.tensor([qidx[q] for q in calib.queue]))
     t_fraud = fit_temperature(cf, torch.tensor(calib.fraud.astype(int).values))
-    print(f"temperaturas: fila {t_prod:.3f} | fraude {t_fraud:.3f}")
+    print(f"temperatures: queue {t_prod:.3f} | fraud {t_fraud:.3f}")
 
     os.makedirs(OUT_DIR, exist_ok=True)
     torch.save({"state_dict": model.state_dict(), "t_prod": t_prod, "t_fraud": t_fraud,
                 "queues": QUEUES, "base": MODEL_ID}, os.path.join(OUT_DIR, "model.pt"))
 
-    # avaliação no teste
+    # evaluation on the test set
     texts = list(test.text)
 
     def one(t):
@@ -144,9 +144,9 @@ def main():
     pp = torch.softmax(lp / t_prod, -1)
     pf = torch.softmax(lf / t_fraud, -1)[:, 1]
     meta = sysio.save("modernbert-ft", test.id, [QUEUES[i] for i in pp.argmax(-1)], pp.max(-1).values.numpy(),
-                      pf.numpy(), "cuda", single, batch_ms, notes=f"{MODEL_ID}, CE multitarefa, {EPOCHS} épocas")
+                      pf.numpy(), "cuda", single, batch_ms, notes=f"{MODEL_ID}, multitask CE, {EPOCHS} epochs")
     acc = (np.array([QUEUES[i] for i in pp.argmax(-1)]) == test.queue.values).mean()
-    print(f"modernbert-ft: acc fila {acc:.3f} | p50 {meta['single_p50_ms']:.0f}ms | lote {batch_ms:.1f}ms")
+    print(f"modernbert-ft: queue acc {acc:.3f} | p50 {meta['single_p50_ms']:.0f}ms | batch {batch_ms:.1f}ms")
 
 
 if __name__ == "__main__":

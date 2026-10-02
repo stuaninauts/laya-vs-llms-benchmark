@@ -1,12 +1,12 @@
-"""LLM local via Ollama, na mesma GPU do Laya: isola arquitetura de preço de API.
+"""Local LLM via Ollama, on the same GPU as Laya: separates architecture from API pricing.
 
-Mesmas opções do GPT (04_llm_baseline.py), mas o modelo responde só "<letra> <Y|N>" e lemos os
-logprobs do token da letra e do token Y/N — assim temos probabilidade de verdade (não a
-"falada"), comparável com a do Laya na curva de calibração.
+Same options as the GPT (04_llm_baseline.py), but the model answers only "<letter> <Y|N>" and we read
+the logprobs of the letter token and of the Y/N token — so we get a real probability (not a
+verbalized one), comparable with Laya's on the calibration curve.
 
-Uso: .venv/bin/python 10_local_llm.py <modelo_ollama> [limite]   ex.: qwen3.5:9b
-Requer Ollama >= 0.12.11 (logprobs) e `ollama pull <modelo>`. Custo: zero (GPU local).
-Grava results/sys_llm-<modelo>.parquet.
+Usage: .venv/bin/python 10_local_llm.py <ollama_model> [limit]   e.g.: qwen3.5:9b
+Requires Ollama >= 0.12.11 (logprobs) and `ollama pull <model>`. Cost: zero (local GPU).
+Writes results/sys_llm-<model>.parquet.
 """
 import math, os, sys, time
 import pandas as pd
@@ -35,15 +35,15 @@ def check_server():
     v = requests.get(f"{HOST}/api/version", timeout=5).json()["version"]
     major, minor, patch = (int(x) for x in v.split("-")[0].split(".")[:3])
     if (major, minor, patch) < (0, 12, 11):
-        sys.exit(f"Ollama {v} não expõe logprobs; atualizar (ver 02-modelos-locais-mapeados.md)")
+        sys.exit(f"Ollama {v} does not expose logprobs; upgrade to >= 0.12.11")
     names = [m["name"] for m in requests.get(f"{HOST}/api/tags", timeout=5).json()["models"]]
     if not any(n == MODEL or n.startswith(MODEL + ":") for n in names):
-        sys.exit(f"modelo {MODEL} não baixado: ollama pull {MODEL}")
+        sys.exit(f"model {MODEL} not downloaded: ollama pull {MODEL}")
     return v
 
 
 def dist_from(top, allowed):
-    """Probabilidades renormalizadas sobre os rótulos permitidos, a partir dos top_logprobs."""
+    """Probabilities renormalized over the allowed labels, from the top_logprobs."""
     p = {}
     for t in top:
         k = t["token"].strip().upper()
@@ -54,7 +54,7 @@ def dist_from(top, allowed):
 
 
 def post_chat(payload, tries=5):
-    """POST com nova tentativa: se o servidor do Ollama cair/reiniciar, espera e tenta de novo."""
+    """POST with retries: if the Ollama server crashes/restarts, wait and try again."""
     for i in range(tries):
         try:
             return requests.post(f"{HOST}/api/chat", timeout=120, json=payload).json()
@@ -72,14 +72,14 @@ def ask(text):
                      {"role": "user", "content": text[:MAX_CHARS]}]})
     toks = r.get("logprobs") or []
     pq, pf = {}, {}
-    for t in toks:  # primeiro token que é letra de fila, depois o primeiro Y/N
+    for t in toks:  # first token that is a queue letter, then the first Y/N
         k = t["token"].strip().upper()
         if not pq and k in LETTERS:
             pq = dist_from(t.get("top_logprobs", []), set(LETTERS))
         elif pq and not pf and k in {"Y", "N"}:
             pf = dist_from(t.get("top_logprobs", []), {"Y", "N"})
     content = r.get("message", {}).get("content", "").strip().upper()
-    if not pq and content[:1] in LETTERS:        # fallback: sem logprob, confiança 1.0
+    if not pq and content[:1] in LETTERS:        # fallback: no logprob, confidence 1.0
         pq = {content[0]: 1.0}
     if not pf and content[-1:] in {"Y", "N"}:
         pf = {content[-1]: 1.0}
@@ -93,10 +93,10 @@ def main():
     test = sysio.load_test()
     if LIMIT:
         test = test.head(LIMIT)
-    ask(test.text.iloc[0])  # carrega o modelo na GPU
+    ask(test.text.iloc[0])  # loads the model onto the GPU
     rows, lat = [], []
     t0 = time.perf_counter()
-    for t in test.text:  # sequencial: é o caso online e o que o Ollama serve por padrão
+    for t in test.text:  # sequential: this is the online case and what Ollama serves by default
         t1 = time.perf_counter()
         rows.append(ask(t))
         lat.append((time.perf_counter() - t1) * 1000)
@@ -104,9 +104,9 @@ def main():
     out = pd.DataFrame(rows)
     name = "llm-" + MODEL.replace(":", "-").replace("/", "-")
     meta = sysio.save(name, test.id, out["product"], out.product_conf, out.fraud_p, "cuda (ollama)", lat, batch_ms,
-                      notes=f"ollama {v}; {out['product'].isna().sum()} respostas não parseadas")
+                      notes=f"ollama {v}; {out['product'].isna().sum()} unparsed responses")
     acc = (out["product"].values == test.queue.values).mean()
-    print(f"{name}: acc fila {acc:.3f} | p50 {meta['single_p50_ms']:.0f}ms | não parseadas {out['product'].isna().sum()}")
+    print(f"{name}: queue acc {acc:.3f} | p50 {meta['single_p50_ms']:.0f}ms | unparsed {out['product'].isna().sum()}")
 
 
 if __name__ == "__main__":

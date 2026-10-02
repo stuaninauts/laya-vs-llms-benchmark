@@ -1,9 +1,9 @@
-"""Baseline LLM: mesmas duas decisões (produto + fraude) com GPT pequeno, saída estruturada.
+"""LLM baseline: the same two decisions (product + fraud) with a small GPT, structured output.
 
-GASTA DINHEIRO (API OpenAI). Só roda com --spend explícito e nunca sobrescreve resultado existente.
-Uso: .venv/bin/python 04_llm_baseline.py gpt-5.4-nano --spend [limite]
-Grava results/llm_<modelo>.parquet com predição, tokens, latência e custo.
-Já executado em 29/09/2026: nano US$ 0.246, mini US$ 0.921 (1.800 reclamações cada).
+COSTS MONEY (OpenAI API). Only runs with an explicit --spend and never overwrites an existing result.
+Usage: .venv/bin/python 04_llm_baseline.py gpt-5.4-nano --spend [limit]
+Writes results/llm_<model>.parquet with prediction, tokens, latency and cost.
+Already run on 2026-09-29: nano US$ 0.246, mini US$ 0.921 (1,800 complaints each).
 """
 import asyncio, json, os, sys, time
 import pandas as pd
@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from common import PRODUCTS, FRAUD_QUESTION, MAX_CHARS
 
-# US$ por 1M tokens (input, output) — tabela pública OpenAI, set/2026
+# US$ per 1M tokens (input, output) — public OpenAI price list, Sep/2026
 PRICES = {"gpt-5.4-nano": (0.20, 1.25), "gpt-5.4-mini": (0.75, 4.50), "gpt-4.1-nano": (0.10, 0.40)}
 
 args = [a for a in sys.argv[1:] if a != "--spend"]
@@ -21,9 +21,9 @@ CONCURRENCY = 16
 OUT = f"results/llm_{MODEL}.parquet"
 
 if "--spend" not in sys.argv:
-    sys.exit(f"Recusado: este script chama API paga. Rode com --spend para autorizar ({MODEL}).")
+    sys.exit(f"Refused: this script calls a paid API. Run with --spend to authorize ({MODEL}).")
 if os.path.exists(OUT):
-    sys.exit(f"{OUT} já existe — não vou pagar de novo. Apague o arquivo se quiser refazer.")
+    sys.exit(f"{OUT} already exists — not paying again. Delete the file if you want to rerun.")
 
 SYSTEM = (
     "You triage consumer complaints received by a US financial institution.\n"
@@ -70,7 +70,7 @@ async def classify(sem, row):
                 return {"id": row.id, "llm_product": out["product"], "llm_fraud": out["fraud"],
                         "llm_fraud_p": out["fraud_probability"], "llm_ms": dt,
                         "tok_in": r.usage.prompt_tokens, "tok_out": r.usage.completion_tokens, "cost_usd": cost}
-            except Exception as e:  # rate limit / transitório
+            except Exception as e:  # rate limit / transient
                 err = e
                 await asyncio.sleep(2 ** attempt)
         return {"id": row.id, "error": repr(err)}
@@ -86,7 +86,7 @@ async def main():
     out = pd.DataFrame(rows)
     out.to_parquet(f"results/llm_{MODEL}.parquet")
     ok = out.dropna(subset=["llm_product"]) if "llm_product" in out else out
-    print(f"{MODEL}: {len(ok)}/{len(out)} ok em {time.time()-t0:.0f}s | custo total US$ {ok.cost_usd.sum():.3f} "
+    print(f"{MODEL}: {len(ok)}/{len(out)} ok in {time.time()-t0:.0f}s | total cost US$ {ok.cost_usd.sum():.3f} "
           f"| p50 {ok.llm_ms.median():.0f}ms p95 {ok.llm_ms.quantile(.95):.0f}ms")
 
 

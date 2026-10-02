@@ -1,4 +1,4 @@
-local,reserva,melhor_threshold,local_share,product_acc,usd_per_1M,reserva_sozinha_acc,reserva_sozinha_usd_per_1M
+local,fallback,best_threshold,local_share,product_acc,usd_per_1M,fallback_alone_acc,fallback_alone_usd_per_1M
 emb-qwen3emb,gpt-5.6-luna,0.65,0.68,0.825,43.88912370697932,0.7916666666666666,136.6767676767677
 modernbert-ft,gpt-5.6-terra,0.8,0.6633333333333333,0.8244444444444444,460.26745398513737,0.8055555555555556,1366.7070707070704
 modernbert-ft,gpt-5.6-luna,0.75,0.6966666666666667,0.8233333333333334,41.601359709043145,0.7916666666666666,136.6767676767677

@@ -1,11 +1,11 @@
-"""Fine-tuning do Laya (inglês, 421M) na triagem de reclamações — 1 GPU (RTX 3060 12GB).
+"""Laya fine-tuning (English, 421M) on complaint triage — 1 GPU (RTX 3060 12GB).
 
-Adaptado do notebook oficial (laya_finetune_ref.ipynb, 2xT4 DDP) para uma GPU:
-mesmo objetivo RLCD (policy gradient com proper scoring rule + cross-entropy suave),
-mesma calibração de temperatura em fatia separada, sem DDP.
+Adapted from the official notebook (laya_finetune_ref.ipynb, 2xT4 DDP) to a single GPU:
+same RLCD objective (policy gradient with a proper scoring rule + soft cross-entropy),
+same temperature calibration on a held-out slice, no DDP.
 
-Uso: .venv/bin/python 05_finetune.py [saida]   (default: models/laya-cfpb)
-Custo: zero (GPU local). Tempo esperado: dezenas de minutos.
+Usage: .venv/bin/python 05_finetune.py [output_dir]   (default: models/laya-cfpb)
+Cost: zero (local GPU). Expected time: tens of minutes.
 """
 import json, os, random, sys, time
 import pandas as pd
@@ -24,8 +24,8 @@ MODEL_ID = "convaiinnovations/laya"
 SEED = 20260929
 
 EPOCHS = 1 if sysio.SMOKE else 3
-MICRO_BATCH = 8       # sequências por forward (12GB com gradient checkpointing + fp16)
-GRAD_ACCUM = 8        # batch efetivo = 64, igual ao notebook (8 * 2 GPUs * 4)
+MICRO_BATCH = 8       # sequences per forward pass (12GB with gradient checkpointing + fp16)
+GRAD_ACCUM = 8        # effective batch = 64, same as the notebook (8 * 2 GPUs * 4)
 GROUP_SIZE = 4
 LR_ENCODER, LR_HEAD = 2.5e-5, 1.0e-4
 SIGMA_START, SIGMA_END = 0.4, 0.1
@@ -33,9 +33,9 @@ CALIB_MAX = 400
 
 
 def targets(row):
-    """(pergunta, alvo) para as duas decisões de uma reclamação."""
+    """(question, target) for the two decisions of a complaint."""
     prod = [1.0 if k == row.queue else 0.0 for k in PRODUCTS]
-    fraud = [0.0, 1.0] if row.fraud else [1.0, 0.0]  # ordem das criteria: false, true
+    fraud = [0.0, 1.0] if row.fraud else [1.0, 0.0]  # criteria order: false, true
     return [("product", prod), ("fraud", fraud)]
 
 
@@ -102,7 +102,7 @@ def forward(model, b, device):
 
 
 def main():
-    assert torch.cuda.is_available(), "sem CUDA — ver RUNBOOK.md (nvidia_uvm)"
+    assert torch.cuda.is_available(), "no CUDA — see Troubleshooting in README.md"
     device = torch.device("cuda")
     random.seed(SEED)
     torch.manual_seed(SEED)
@@ -115,12 +115,12 @@ def main():
     tok = AutoTokenizer.from_pretrained(os.path.join(model_dir, "tokenizer"))
 
     train = sysio.load_train()
-    # calibração separada POR RECLAMAÇÃO (não por item) para as duas decisões de um mesmo
-    # texto não caírem uma no treino e outra na calibração
+    # calibration split PER COMPLAINT (not per item) so the two decisions for the same
+    # text never land one in training and the other in calibration
     calib_ids = set(train.sample(n=min(CALIB_MAX // 2, len(train) // 10), random_state=SEED).id)
     train_items = build_items(train[~train.id.isin(calib_ids)], tok, cfg)
     calib_items = build_items(train[train.id.isin(calib_ids)], tok, cfg)
-    print(f"{len(train_items)} itens de treino | {len(calib_items)} de calibração")
+    print(f"{len(train_items)} training items | {len(calib_items)} calibration items")
 
     model = build_model(cfg, encoder_dir=os.path.join(model_dir, "encoder"))
     model.load_state_dict(load_file(os.path.join(model_dir, "model.safetensors")), strict=True)
@@ -173,11 +173,11 @@ def main():
             ep_loss += loss.item() * GRAD_ACCUM
             nb += 1
             if nb % 50 == 0:
-                print(f"  época {epoch+1}/{EPOCHS} passo {nb} loss {loss.item()*GRAD_ACCUM:.4f} "
+                print(f"  epoch {epoch+1}/{EPOCHS} step {nb} loss {loss.item()*GRAD_ACCUM:.4f} "
                       f"reward {r.mean().item():.3f}", flush=True)
-        print(f"=== época {epoch+1} ok em {time.time()-t0:.0f}s | loss média {ep_loss/max(1,nb):.4f}", flush=True)
+        print(f"=== epoch {epoch+1} done in {time.time()-t0:.0f}s | mean loss {ep_loss/max(1,nb):.4f}", flush=True)
 
-    # calibração de temperatura na fatia que não treinou
+    # temperature calibration on the held-out slice
     model.eval()
     del opt, scaler, sched
     torch.cuda.empty_cache()
@@ -194,7 +194,7 @@ def main():
         sel = [(z, t) for q_, z, t in preds if q_ == qt]
         if sel:
             temps[qt] = fit_one_temp(sel)
-    print("temperaturas (choice, score, noul):", [round(t, 3) for t in temps])
+    print("temperatures (choice, score, noul):", [round(t, 3) for t in temps])
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     save_file({k: v.half().contiguous().cpu() for k, v in model.state_dict().items()},
@@ -205,7 +205,7 @@ def main():
     cfg.pop("temperature_by_options", None)
     with open(os.path.join(OUTPUT_DIR, "rl_agent_config.json"), "w") as f:
         json.dump(cfg, f, indent=2)
-    print(f"salvo em {OUTPUT_DIR} | total {time.time()-t0:.0f}s")
+    print(f"saved to {OUTPUT_DIR} | total {time.time()-t0:.0f}s")
 
 
 if __name__ == "__main__":

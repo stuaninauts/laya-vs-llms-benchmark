@@ -4,5 +4,5 @@
   "single_p50_ms": 18.381178000709042,
   "single_p95_ms": 19.426990353531437,
   "batch_ms_per_complaint": 1.5244355561096907,
-  "notes": "ibm-granite/granite-embedding-small-english-r2 congelado + LogisticRegressionCV"
+  "notes": "ibm-granite/granite-embedding-small-english-r2 frozen + LogisticRegressionCV"
 }

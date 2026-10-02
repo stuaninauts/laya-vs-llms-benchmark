@@ -1,27 +1,27 @@
-"""Consolida tudo o que existir em results/ — não chama API nenhuma.
+"""Consolidates whatever exists in results/ — calls no API at all.
 
-Lê results/llm_*.parquet (GPT via API, já pago) e results/sys_*.parquet (sistemas locais, ver sysio.py).
-- métricas por sistema: acurácia e F1 macro de fila; precisão/recall/F1/AUC/ECE de fraude
-- latência e custo por 1 milhão de reclamações
-- cascata: sistema local decide quando confiança >= t; o resto vai para o LLM de API
-Grava results/summary.md e results/cascade_<sistema>.csv.
+Reads results/llm_*.parquet (GPT via API, already paid) and results/sys_*.parquet (local systems, see sysio.py).
+- per-system metrics: queue accuracy and macro F1; fraud precision/recall/F1/AUC/ECE
+- latency and cost per 1 million complaints
+- cascade: the local system decides when confidence >= t; the rest goes to the API LLM
+Writes results/summary.md and results/cascade_<system>.csv.
 """
 import glob, json, os
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 
-# Premissas de custo dos sistemas locais (ficam explícitas no summary)
-WATTS = {"cuda": 170, "cpu": 65}   # TDP RTX 3060 / CPU desktop típica
+# Cost assumptions for the local systems (stated explicitly in the summary)
+WATTS = {"cuda": 170, "cpu": 65}   # TDP RTX 3060 / typical desktop CPU
 ENERGY_USD_PER_KWH = 0.15
-CLOUD_T4_USD_PER_HOUR = 0.35       # GPU T4 sob demanda, referência GCP
-CASCADE_LLMS = ["gpt-5.4-mini", "gpt-5.6-luna__full", "gpt-5.6-terra__s900"]   # reservas (terra só na s900)
+CLOUD_T4_USD_PER_HOUR = 0.35       # on-demand T4 GPU, GCP reference
+CASCADE_LLMS = ["gpt-5.4-mini", "gpt-5.6-luna__full", "gpt-5.6-terra__s900"]   # fallbacks (terra only on s900)
 
 test = pd.read_parquet("data/test.parquet")[["id", "queue", "fraud"]]
 
 
 def ece(y, p, bins=10):
-    """Erro de calibração esperado da probabilidade de fraude."""
+    """Expected calibration error of the fraud probability."""
     b = np.clip((p * bins).astype(int), 0, bins - 1)
     return sum(abs(y[b == i].mean() - p[b == i].mean()) * (b == i).mean() for i in range(bins) if (b == i).any())
 
@@ -62,15 +62,15 @@ for path in sorted(glob.glob("results/sys_*.parquet")):
                  "usd_per_1M_cloud_T4": hours_per_1M * CLOUD_T4_USD_PER_HOUR if meta["device"] != "cpu" else np.nan})
 
 summary = pd.DataFrame(rows).sort_values("product_acc", ascending=False)
-lines = ["# Resultados — triagem de reclamações CFPB", "",
-         f"Teste: {len(test)} reclamações, 9 filas (200 cada), fraude {test.fraud.mean():.1%}.", "",
+lines = ["# Results — CFPB complaint triage", "",
+         f"Test: {len(test)} complaints, 9 queues (200 each), fraud {test.fraud.mean():.1%}.", "",
          summary.round(4).to_markdown(index=False), "",
-         f"Custo local = energia ({WATTS['cuda']} W GPU / {WATTS['cpu']} W CPU, US$ {ENERGY_USD_PER_KWH}/kWh) "
-         f"no throughput em lote; referência de nuvem T4 US$ {CLOUD_T4_USD_PER_HOUR}/h. "
-         "p50/p95 = decisão isolada (1 reclamação por chamada); NaN = rodado via Batch API (sem latência). "
-         "Sistemas com n diferente não são diretamente comparáveis — ver a tabela pareada abaixo."]
+         f"Local cost = energy ({WATTS['cuda']} W GPU / {WATTS['cpu']} W CPU, US$ {ENERGY_USD_PER_KWH}/kWh) "
+         f"at batch throughput; T4 cloud reference US$ {CLOUD_T4_USD_PER_HOUR}/h. "
+         "p50/p95 = isolated decision (1 complaint per call); NaN = run via the Batch API (no latency). "
+         "Systems with a different n are not directly comparable — see the paired table below."]
 
-# comparação pareada: todo sistema avaliado nas MESMAS reclamações da amostra s900
+# paired comparison: every system evaluated on the SAME complaints of the s900 subset
 if os.path.exists("data/test_s900.parquet"):
     s900 = set(pd.read_parquet("data/test_s900.parquet").id)
     paired = []
@@ -81,12 +81,12 @@ if os.path.exists("data/test_s900.parquet"):
         if len(dd) >= 0.95 * len(s900):
             paired.append({"system": name, "n": len(dd), **metrics(dd, *cols)})
     if paired:
-        lines += ["", f"## Comparação pareada na amostra s900 ({len(s900)} reclamações, as mesmas para todos)", "",
+        lines += ["", f"## Paired comparison on the s900 subset ({len(s900)} complaints, the same for every system)", "",
                   pd.DataFrame(paired).sort_values("product_acc", ascending=False).round(4).to_markdown(index=False)]
 
-# Cascatas: sistema local decide quando confiança >= t; o resto vai para um LLM de reserva.
-# Custo da reserva = preço SÍNCRONO por reclamação (cascata é um sistema online): usa o arquivo
-# __lat200 do modelo quando existir (ex.: luna rodou o teste completo via batch, a -50%).
+# Cascades: the local system decides when confidence >= t; the rest goes to a fallback LLM.
+# Fallback cost = SYNCHRONOUS price per complaint (a cascade is an online system): uses the model's
+# __lat200 file when it exists (e.g. luna ran the full test set via batch, at -50%).
 cascade_best = []
 for fb in CASCADE_LLMS:
     llm = frames.get(fb)
@@ -111,16 +111,16 @@ for fb in CASCADE_LLMS:
         cas = pd.DataFrame(cas)
         cas.to_csv(f"results/cascade_{name}__{fb_name}.csv", index=False)
         b = cas.loc[cas.product_acc.idxmax()]
-        cascade_best.append({"local": name, "reserva": fb_name, "melhor_threshold": b.threshold,
+        cascade_best.append({"local": name, "fallback": fb_name, "best_threshold": b.threshold,
                              "local_share": b.local_share, "product_acc": b.product_acc,
-                             "usd_per_1M": b.usd_per_1M, "reserva_sozinha_acc": llm_acc,
-                             "reserva_sozinha_usd_per_1M": llm_cost})
-        lines += ["", f"## Cascata {name} → {fb_name} (n={len(m)})", "", cas.round(4).to_markdown(index=False)]
+                             "usd_per_1M": b.usd_per_1M, "fallback_alone_acc": llm_acc,
+                             "fallback_alone_usd_per_1M": llm_cost})
+        lines += ["", f"## Cascade {name} → {fb_name} (n={len(m)})", "", cas.round(4).to_markdown(index=False)]
 
 if cascade_best:
     cb = pd.DataFrame(cascade_best).sort_values("product_acc", ascending=False)
     cb.to_csv("results/cascade_best.csv", index=False)
-    lines += ["", "## Resumo: melhor ponto de cada cascata (threshold com maior acurácia final)", "",
+    lines += ["", "## Summary: best point of each cascade (threshold with the highest final accuracy)", "",
               cb.round(4).to_markdown(index=False)]
 
 open("results/summary.md", "w").write("\n".join(lines) + "\n")

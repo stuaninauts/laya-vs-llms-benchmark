@@ -1,10 +1,10 @@
-"""Baixa os modelos do experimento de forma retomável: se a internet cair, espera e continua.
+"""Downloads the experiment's models resumably: if the connection drops, it waits and continues.
 
-O huggingface_hub mantém os arquivos parciais (.incomplete) no cache e retoma de onde parou;
-este script só repete as tentativas com espera crescente. Pode ser interrompido e rodado de
-novo a qualquer momento: o que já terminou não é baixado outra vez.
+huggingface_hub keeps partial files (.incomplete) in the cache and resumes where it stopped;
+this script just retries with increasing waits. It can be interrupted and rerun at any
+time: whatever already finished is not downloaded again.
 
-Uso: .venv/bin/python download_models.py
+Usage: .venv/bin/python download_models.py
 """
 import os, sys, time
 
@@ -12,7 +12,7 @@ os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
 from huggingface_hub import snapshot_download
 
 MODELS = [
-    # só o checkpoint inglês do Laya (raiz do repo); multilíngue e typed-decisions ficam de fora
+    # only Laya's English checkpoint (repo root); multilingual and typed-decisions are left out
     ("convaiinnovations/laya", {"ignore_patterns": ["multilingual/*", "typed-decisions/*", "eval/*", "assets/*"]}),
     ("ibm-granite/granite-embedding-small-english-r2", {}),
     ("Qwen/Qwen3-Embedding-0.6B", {}),
@@ -31,13 +31,13 @@ def fetch(repo, kw):
             return
         except KeyboardInterrupt:
             raise
-        except Exception as e:  # queda de rede, timeout, 5xx: espera e tenta de novo
-            print(f"RETRY {repo} tentativa {attempt}: {type(e).__name__}: {str(e)[:160]} "
-                  f"(nova tentativa em {wait}s)", flush=True)
+        except Exception as e:  # network drop, timeout, 5xx: wait and retry
+            print(f"RETRY {repo} attempt {attempt}: {type(e).__name__}: {str(e)[:160]} "
+                  f"(retrying in {wait}s)", flush=True)
             time.sleep(wait)
             wait = min(wait * 2, MAX_WAIT)
 
 
 for repo, kw in MODELS:
     fetch(repo, kw)
-print("DOWNLOAD COMPLETO", flush=True)
+print("DOWNLOAD COMPLETE", flush=True)

@@ -1,20 +1,20 @@
-"""LLMs de API (OpenAI e Anthropic) com o mesmo prompt/schema do baseline já pago.
+"""API LLMs (OpenAI and Anthropic) with the same prompt/schema as the already-paid baseline.
 
-GASTA DINHEIRO nos modos sync e submit — só rodam com --spend, e nunca sobrescrevem resultado.
-O modo estimate é local e gratuito.
+COSTS MONEY in sync and submit modes — they only run with --spend, and never overwrite a result.
+The estimate mode is local and free.
 
-Uso:
-  .venv/bin/python 13_llm_api.py estimate                              tabela de custos (grátis)
-  .venv/bin/python 13_llm_api.py probe  openai <modelo> --spend        3 chamadas (~US$ 0,001): confirma
-                                         tokens reais (inclusive de raciocínio) e reestima o custo
-  .venv/bin/python 13_llm_api.py sync   <provider> <modelo> <amostra> --spend
-  .venv/bin/python 13_llm_api.py submit <provider> <modelo> <amostra> --spend   (Batch API, -50%)
-  .venv/bin/python 13_llm_api.py collect <provider> <modelo> <amostra>          (baixa o batch; grátis)
-  provider: openai | anthropic     amostra: full (1.800) | s900 | lat200
+Usage:
+  .venv/bin/python 13_llm_api.py estimate                              cost table (free)
+  .venv/bin/python 13_llm_api.py probe  openai <model> --spend         3 calls (~US$ 0.001): confirms
+                                         real token counts (including reasoning) and re-estimates cost
+  .venv/bin/python 13_llm_api.py sync   <provider> <model> <sample> --spend
+  .venv/bin/python 13_llm_api.py submit <provider> <model> <sample> --spend   (Batch API, -50%)
+  .venv/bin/python 13_llm_api.py collect <provider> <model> <sample>          (downloads the batch; free)
+  provider: openai | anthropic     sample: full (1,800) | s900 | lat200
 
-sync mede latência de verdade (use lat200); submit/collect dá acurácia barata (use s900 ou full).
-Grava results/llm_<modelo>__<amostra>.parquet no mesmo formato do baseline (06_analyze.py lê).
-Chaves: OPENAI_API_KEY; ANTHROPIC_API_KEY (ou `ant auth login`).
+sync measures real latency (use lat200); submit/collect gives cheap accuracy (use s900 or full).
+Writes results/llm_<model>__<sample>.parquet in the same format as the baseline (read by 06_analyze.py).
+Keys: OPENAI_API_KEY; ANTHROPIC_API_KEY (or `ant auth login`).
 """
 import asyncio, json, os, sys, time
 import pandas as pd
@@ -22,15 +22,15 @@ import pandas as pd
 from common import MAX_CHARS
 from llm_prompt import SYSTEM, SCHEMA, PRICES, BATCH_DISCOUNT, estimate
 
-BUDGET_USD = float(os.environ.get("BUDGET_USD", "2.0"))  # teto desta etapa (chave POST-LAYA)
-BRL_PER_USD = 5.40  # câmbio de referência; ajuste
+BUDGET_USD = float(os.environ.get("BUDGET_USD", "2.0"))  # budget cap for this stage (POST-LAYA key)
+BRL_PER_USD = 5.40  # reference exchange rate; adjust
 SAMPLES = {"full": "data/test.parquet", "s900": "data/test_s900.parquet", "lat200": "data/test_lat200.parquet"}
 CONCURRENCY = 8
 BATCH_DIR = "results/batches"
 
 
 def load_env_key():
-    """Usa a chave do .env do projeto (nome com hífen não vira variável de shell). Nunca imprime."""
+    """Uses the key from the project's .env (a hyphenated name can't be a shell variable). Never prints it."""
     if not os.path.exists(".env"):
         return False
     for line in open(".env"):
@@ -42,13 +42,13 @@ def load_env_key():
 
 
 def spent_this_stage():
-    """Gasto já registrado nesta etapa: resultados novos (llm_<modelo>__<amostra>) + batches submetidos."""
+    """Spend already recorded in this stage: new results (llm_<model>__<sample>) + submitted batches."""
     import glob
     total = sum(pd.read_parquet(f)["cost_usd"].sum() for f in glob.glob("results/llm_*__*.parquet"))
     for st in [f for f in glob.glob(f"{BATCH_DIR}/*.json") if not os.path.basename(f).startswith("probe_")]:
         d = json.load(open(st))
         if not os.path.exists(out_path(d["model"], d["sample"])):
-            total += d.get("estimate_usd", 0.0)   # batch em andamento: conta a estimativa
+            total += d.get("estimate_usd", 0.0)   # batch in progress: count its estimate
     total += sum(json.load(open(f)).get("cost_usd", 0.0) for f in glob.glob(f"{BATCH_DIR}/probe_*.json"))
     return total
 
@@ -56,8 +56,8 @@ def spent_this_stage():
 def check_budget(est):
     spent = spent_this_stage()
     if spent + est > BUDGET_USD:
-        sys.exit(f"Recusado pelo teto: já gasto US$ {spent:.3f} + estimativa US$ {est:.3f} > US$ {BUDGET_USD:.2f}.")
-    print(f"orçamento: gasto US$ {spent:.3f} + estimativa US$ {est:.3f} ≤ teto US$ {BUDGET_USD:.2f}")
+        sys.exit(f"Refused by budget cap: already spent US$ {spent:.3f} + estimate US$ {est:.3f} > US$ {BUDGET_USD:.2f}.")
+    print(f"budget: spent US$ {spent:.3f} + estimate US$ {est:.3f} ≤ cap US$ {BUDGET_USD:.2f}")
 
 
 def out_path(model, sample):
@@ -125,7 +125,7 @@ def openai_collect(model, batch_id):
     client = OpenAI()
     b = client.batches.retrieve(batch_id)
     if b.status != "completed":
-        sys.exit(f"batch {batch_id} ainda em {b.status} ({b.request_counts})")
+        sys.exit(f"batch {batch_id} still {b.status} ({b.request_counts})")
     rows = []
     for line in client.files.content(b.output_file_id).text.splitlines():
         r = json.loads(line)
@@ -146,10 +146,10 @@ def anthropic_params(model, text):
          "system": SYSTEM, "messages": [{"role": "user", "content": text[:MAX_CHARS]}],
          "output_config": {"format": {"type": "json_schema", "schema": SCHEMA}}}
     if model == "claude-sonnet-5-5":
-        p["thinking"] = {"type": "between_tools"}          # desliga o raciocínio (disabled dá 400 no 5.5)
+        p["thinking"] = {"type": "between_tools"}          # turns reasoning off ("disabled" returns 400 on 5.5)
     elif model == "claude-opus-5-5":
-        p["output_config"]["effort"] = "low"                # raciocínio não desliga no Opus 5.5
-    return p                                                 # Haiku 4.5: sem thinking por padrão
+        p["output_config"]["effort"] = "low"                # reasoning can't be turned off on Opus 5.5
+    return p                                                 # Haiku 4.5: no thinking by default
 
 
 def anthropic_text(msg):
@@ -192,9 +192,9 @@ def anthropic_collect(model, batch_id):
     client = anthropic.Anthropic()
     b = client.messages.batches.retrieve(batch_id)
     if b.processing_status != "ended":
-        sys.exit(f"batch {batch_id} ainda em {b.processing_status} ({b.request_counts})")
+        sys.exit(f"batch {batch_id} still {b.processing_status} ({b.request_counts})")
     rows = []
-    for r in client.messages.batches.results(batch_id):   # ordem arbitrária: chave é o custom_id
+    for r in client.messages.batches.results(batch_id):   # arbitrary order: custom_id is the key
         if r.result.type != "succeeded":
             rows.append({"id": int(r.custom_id), "error": r.result.type})
             continue
@@ -213,7 +213,7 @@ def save(rows, model, sample):
     out = pd.DataFrame(rows)
     out.to_parquet(out_path(model, sample))
     ok = out.dropna(subset=["llm_product"]) if "llm_product" in out else out.iloc[0:0]
-    print(f"{model} [{sample}]: {len(ok)}/{len(out)} ok | custo US$ {ok.get('cost_usd', pd.Series()).sum():.3f}"
+    print(f"{model} [{sample}]: {len(ok)}/{len(out)} ok | cost US$ {ok.get('cost_usd', pd.Series()).sum():.3f}"
           + (f" | p50 {ok.llm_ms.median():.0f}ms p95 {ok.llm_ms.quantile(.95):.0f}ms" if ok.llm_ms.notna().any() else ""))
 
 
@@ -226,18 +226,18 @@ def cmd_estimate():
                      "full batch": estimate(prov, model, 1800, True),
                      "full sync": estimate(prov, model, 1800, False)})
     print(pd.DataFrame(rows).round(3).to_markdown(index=False))
-    print("\nEstimativa com tokens medidos no baseline (518 entrada / 30 saída; Anthropic +20%; Opus 250 saída).")
+    print("\nEstimate using tokens measured in the baseline (518 input / 30 output; Anthropic +20%; Opus 250 output).")
     import glob
     spent = sum(pd.read_parquet(f)["cost_usd"].sum() for f in glob.glob("results/llm_*.parquet"))
-    print(f"\nJá gasto em API (soma de results/llm_*.parquet): US$ {spent:.2f} ≈ R$ {spent * BRL_PER_USD:.2f} "
-          f"(câmbio {BRL_PER_USD})")
+    print(f"\nAlready spent on APIs (sum of results/llm_*.parquet): US$ {spent:.2f} ≈ R$ {spent * BRL_PER_USD:.2f} "
+          f"(exchange rate {BRL_PER_USD})")
 
 
 def cmd_probe(prov, model):
-    """3 chamadas síncronas para medir tokens reais antes de gastar com o batch."""
-    assert prov == "openai", "só OpenAI no escopo atual"
+    """3 synchronous calls to measure real token counts before spending on the batch."""
+    assert prov == "openai", "only OpenAI in the current scope"
     if "--spend" not in sys.argv:
-        sys.exit("Recusado: probe faz 3 chamadas pagas (~US$ 0,001). Rode com --spend.")
+        sys.exit("Refused: probe makes 3 paid calls (~US$ 0.001). Run with --spend.")
     load_env_key()
     check_budget(0.01)
     from openai import OpenAI
@@ -248,19 +248,19 @@ def cmd_probe(prov, model):
         try:
             r = client.chat.completions.create(**openai_params(model, row.text))
         except Exception as e:
-            sys.exit(f"{model} recusou os parâmetros ({e}). Tente OPENAI_REASONING_EFFORT=minimal ou low.")
+            sys.exit(f"{model} rejected the parameters ({e}). Try OPENAI_REASONING_EFFORT=minimal or low.")
         tin.append(r.usage.prompt_tokens)
         tout.append(r.usage.completion_tokens)
         det = getattr(r.usage, "completion_tokens_details", None)
         treason.append(getattr(det, "reasoning_tokens", 0) or 0)
-        parse(r.choices[0].message.content)  # falha aqui se a saída não respeitar o schema
+        parse(r.choices[0].message.content)  # fails here if the output doesn't match the schema
     avg_in, avg_out = sum(tin) / 3, sum(tout) / 3
     per = cost("openai", model, avg_in, avg_out, False)
     os.makedirs(BATCH_DIR, exist_ok=True)
     json.dump({"model": model, "cost_usd": per * 3, "tok_in": avg_in, "tok_out": avg_out,
                "reasoning_tokens": sum(treason) / 3}, open(f"{BATCH_DIR}/probe_{model}.json", "w"), indent=2)
-    print(f"{model}: entrada {avg_in:.0f} | saída {avg_out:.0f} (raciocínio {sum(treason)/3:.0f}) tokens/reclamação")
-    print(f"  custo real estimado: s900 batch US$ {per*900*BATCH_DISCOUNT:.3f} | full batch US$ {per*1800*BATCH_DISCOUNT:.3f} "
+    print(f"{model}: input {avg_in:.0f} | output {avg_out:.0f} (reasoning {sum(treason)/3:.0f}) tokens/complaint")
+    print(f"  estimated real cost: s900 batch US$ {per*900*BATCH_DISCOUNT:.3f} | full batch US$ {per*1800*BATCH_DISCOUNT:.3f} "
           f"| lat200 sync US$ {per*198:.3f}")
 
 
@@ -271,14 +271,14 @@ def main():
     if args[0] == "probe":
         return cmd_probe(args[1], args[2])
     mode, prov, model, sample = args[:4]
-    assert (prov, model) in PRICES, f"modelo sem preço cadastrado: {prov}/{model}"
+    assert (prov, model) in PRICES, f"model with no registered price: {prov}/{model}"
     tag = f"{model}__{sample}"
     os.makedirs(BATCH_DIR, exist_ok=True)
     state = f"{BATCH_DIR}/{tag}.json"
 
     if mode == "collect":
         if os.path.exists(out_path(model, sample)):
-            sys.exit(f"{out_path(model, sample)} já existe")
+            sys.exit(f"{out_path(model, sample)} already exists")
         load_env_key()
         bid = json.load(open(state))["batch_id"]
         rows = openai_collect(model, bid) if prov == "openai" else anthropic_collect(model, bid)
@@ -287,13 +287,13 @@ def main():
     df = pd.read_parquet(SAMPLES[sample])
     est = estimate(prov, model, len(df), batch=(mode == "submit"))
     if "--spend" not in sys.argv:
-        sys.exit(f"Recusado: chamada paga. Estimativa {prov}/{model} [{sample}, {mode}]: US$ {est:.2f}. "
-                 "Rode com --spend para autorizar.")
+        sys.exit(f"Refused: paid call. Estimate {prov}/{model} [{sample}, {mode}]: US$ {est:.2f}. "
+                 "Run with --spend to authorize.")
     if os.path.exists(out_path(model, sample)) or (mode == "submit" and os.path.exists(state)):
-        sys.exit(f"{tag} já rodado/submetido — não vou pagar de novo.")
+        sys.exit(f"{tag} already run/submitted — not paying again.")
     load_env_key()
     check_budget(est)
-    print(f"{prov}/{model} [{sample}, {mode}] — estimativa US$ {est:.2f}")
+    print(f"{prov}/{model} [{sample}, {mode}] — estimate US$ {est:.2f}")
 
     if mode == "sync":
         rows = asyncio.run(openai_sync(model, df) if prov == "openai" else anthropic_sync(model, df))
@@ -302,7 +302,7 @@ def main():
         bid = openai_submit(model, df, tag) if prov == "openai" else anthropic_submit(model, df, tag)
         json.dump({"batch_id": bid, "provider": prov, "model": model, "sample": sample, "n": len(df),
                    "estimate_usd": est, "submitted": time.strftime("%Y-%m-%d %H:%M")}, open(state, "w"), indent=2)
-        print(f"batch submetido: {bid} — depois: 13_llm_api.py collect {prov} {model} {sample}")
+        print(f"batch submitted: {bid} — then: 13_llm_api.py collect {prov} {model} {sample}")
 
 
 if __name__ == "__main__":

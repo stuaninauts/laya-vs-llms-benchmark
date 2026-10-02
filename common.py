@@ -1,9 +1,9 @@
-"""Definições compartilhadas: filas de produto, pergunta de fraude, mapeamentos da base CFPB."""
+"""Shared definitions: product queues, fraud question, CFPB dataset mappings."""
 import re
 
-MAX_CHARS = 1500  # mesmo texto truncado para Laya e para o LLM
+MAX_CHARS = 1500  # same truncated text for Laya and for the LLM
 
-# fila -> descrição (vira `criteria` no Laya e lista de opções no prompt do LLM)
+# queue -> description (becomes `criteria` in Laya and the option list in the LLM prompt)
 PRODUCTS = {
     "credit_reporting": "credit reports, credit scores, credit bureaus, disputes of report information",
     "debt_collection": "debt collectors, collection calls or letters, debts the consumer says are not owed",
@@ -59,7 +59,7 @@ def map_product(product: str, sub_product: str | None) -> str | None:
 
 FRAUD_POS = re.compile(r"fraud or scam|result of identity theft|as result of identity theft or fraud|"
                        r"opened as a result of fraud|fraudulent loan|unauthorized withdrawals or charges", re.I)
-# rótulos ambíguos: nem claramente fraude nem claramente não-fraude -> fora do experimento
+# ambiguous labels: neither clearly fraud nor clearly non-fraud -> excluded from the experiment
 FRAUD_AMBIGUOUS = re.compile(r"belongs to someone else|fraud alerts|identity theft protection|"
                              r"identify theft protection|monitoring services|unauthorized transactions or other|"
                              r"improper use of your report", re.I)

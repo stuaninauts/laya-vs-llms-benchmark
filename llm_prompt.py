@@ -1,7 +1,7 @@
-"""Prompt, schema e tabela de preços compartilhados por todos os LLMs de API.
+"""Prompt, schema and price table shared by all API LLMs.
 
-O SYSTEM e o SCHEMA são os mesmos usados no baseline já pago (gpt-5.4-nano/mini), para que todo
-LLM de API receba exatamente a mesma instrução — diferença de prompt não entra como variável.
+SYSTEM and SCHEMA are the same ones used in the already-paid baseline (gpt-5.4-nano/mini), so every
+API LLM gets exactly the same instruction — prompt differences don't enter as a variable.
 """
 from common import PRODUCTS, FRAUD_QUESTION
 
@@ -26,15 +26,15 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-# US$ por 1M tokens (entrada, saída), preço de lista — consultado em 30/09/2026.
-# OpenAI: tabelas públicas (morphllm / benchlm, set/2026). Anthropic: referência oficial do SDK.
-# Batch API: 50% de desconto nos dois provedores.
+# US$ per 1M tokens (input, output), list price — checked on 2026-09-30.
+# OpenAI: public price tables (morphllm / benchlm, Sep/2026). Anthropic: official SDK reference.
+# Batch API: 50% discount on both providers.
 PRICES = {
     ("openai", "gpt-5.4-nano"): (0.20, 1.25),
     ("openai", "gpt-5.4-mini"): (0.75, 4.50),
     ("openai", "gpt-5.6-luna"): (0.20, 1.20),
     ("openai", "gpt-5.6-terra"): (2.00, 12.00),
-    ("openai", "gpt-5.6-sol"): (5.00, 30.00),     # promo US$ 4/20 até nov/2026; usamos o de lista
+    ("openai", "gpt-5.6-sol"): (5.00, 30.00),     # promo US$ 4/20 until Nov/2026; we use the list price
     ("openai", "gpt-5.5"): (5.00, 30.00),
     ("openai", "gpt-4.1-nano"): (0.10, 0.40),
     ("openai", "gpt-4.1-mini"): (0.40, 1.60),
@@ -44,9 +44,9 @@ PRICES = {
 }
 BATCH_DISCOUNT = 0.5
 
-# Tokens por reclamação medidos no baseline gpt-5.4-nano (1.800 chamadas): 517,6 entrada / 26,4 saída.
-# Anthropic usa outro tokenizer: estimamos +20% (confirmar com count_tokens, que é gratuito).
-# Opus 5.5 não desliga o raciocínio: saída estimada bem maior.
+# Tokens per complaint measured in the gpt-5.4-nano baseline (1,800 calls): 517.6 input / 26.4 output.
+# Anthropic uses a different tokenizer: we estimate +20% (confirm with count_tokens, which is free).
+# Opus 5.5 can't turn reasoning off: much larger estimated output.
 TOKENS_IN = {"openai": 518, "anthropic": 622}
 TOKENS_OUT = {"default": 30, "claude-opus-5-5": 250}
 

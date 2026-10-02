@@ -1,7 +1,7 @@
-"""Monta train/test a partir da CFPB (2023+): dedup de cartas-modelo, filas de produto, rótulo de fraude.
+"""Builds train/test from the CFPB data (2023+): template-letter dedup, product queues, fraud label.
 
-Teste: 200 por fila (balanceado) com fraude enriquecida (até 30% por fila) para ter positivos suficientes.
-Treino (fine-tuning do Laya): disjunto, 400 por fila, mesma estratégia.
+Test: 200 per queue (balanced) with fraud oversampled (up to 30% per queue) to get enough positives.
+Train (Laya fine-tuning): disjoint, 400 per queue, same strategy.
 """
 import re
 import pandas as pd
@@ -17,13 +17,13 @@ df["fraud"] = [fraud_label(i, s) for i, s in zip(df["issue"], df["sub_issue"])]
 df = df.dropna(subset=["queue", "fraud"])
 df["fraud"] = df["fraud"].astype(bool)
 
-# cartas-modelo: remove duplicatas exatas e quase-exatas (mesmo início normalizado)
+# template letters: drop exact and near-exact duplicates (same normalized opening)
 text = df["consumer_complaint_narrative"]
 key = text.str.lower().map(lambda t: re.sub(r"[^a-z]+", " ", t)[:300])
 df = df[~key.duplicated(keep=False) & (text.str.len() >= 100)]
 df = df.rename(columns={"consumer_complaint_narrative": "text"})
 df["id"] = range(len(df))
-print("pool após limpeza:", len(df))
+print("pool after cleaning:", len(df))
 print(pd.crosstab(df.queue, df.fraud))
 
 
@@ -42,4 +42,4 @@ test = sample(df, N_TEST)[cols]
 train = sample(df[~df.id.isin(test.id)], N_TRAIN)[cols]
 test.to_parquet("data/test.parquet")
 train.to_parquet("data/train.parquet")
-print("test:", len(test), "fraude:", test.fraud.mean().round(3), "| train:", len(train), "fraude:", train.fraud.mean().round(3))
+print("test:", len(test), "fraud:", test.fraud.mean().round(3), "| train:", len(train), "fraud:", train.fraud.mean().round(3))
