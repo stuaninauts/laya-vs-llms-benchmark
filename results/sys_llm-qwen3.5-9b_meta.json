@@ -1,0 +1,8 @@
+{
+  "system": "llm-qwen3.5-9b",
+  "device": "cuda (ollama)",
+  "single_p50_ms": 848.3335864984838,
+  "single_p95_ms": 1258.0332387526141,
+  "batch_ms_per_complaint": 881.5152677155573,
+  "notes": "ollama 0.35.0; 0 respostas n\u00e3o parseadas"
+}

@@ -1,0 +1,8 @@
+{
+  "system": "llm-gemma4-12b-it-qat",
+  "device": "cuda (ollama)",
+  "single_p50_ms": 1123.3687790008844,
+  "single_p95_ms": 1550.0013731485524,
+  "batch_ms_per_complaint": 1107.2323298994445,
+  "notes": "ollama 0.35.0; 1 respostas n\u00e3o parseadas"
+}
