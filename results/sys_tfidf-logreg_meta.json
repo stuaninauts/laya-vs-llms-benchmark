@@ -1,0 +1,8 @@
+{
+  "system": "tfidf-logreg",
+  "device": "cpu",
+  "single_p50_ms": 1.1095384979853407,
+  "single_p95_ms": 7.295035401330096,
+  "batch_ms_per_complaint": 0.09276604444393241,
+  "notes": "TF-IDF 1-2gram + LogisticRegression, class_weight balanced na fraude"
+}

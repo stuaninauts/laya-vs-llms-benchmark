@@ -1,0 +1,8 @@
+{
+  "system": "emb-qwen3emb",
+  "device": "cuda",
+  "single_p50_ms": 48.20593249678495,
+  "single_p95_ms": 79.92686795114423,
+  "batch_ms_per_complaint": 21.537607117222958,
+  "notes": "Qwen/Qwen3-Embedding-0.6B congelado + LogisticRegressionCV"
+}

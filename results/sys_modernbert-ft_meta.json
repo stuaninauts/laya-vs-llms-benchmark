@@ -1,0 +1,8 @@
+{
+  "system": "modernbert-ft",
+  "device": "cuda",
+  "single_p50_ms": 25.64288699795725,
+  "single_p95_ms": 38.615887148989714,
+  "batch_ms_per_complaint": 20.15155488333322,
+  "notes": "answerdotai/ModernBERT-large, CE multitarefa, 3 \u00e9pocas"
+}
