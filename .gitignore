@@ -1,0 +1,32 @@
+# ambiente
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# dados brutos e derivados (pesados; reproduzíveis via 02_prepare.py)
+data/
+
+# pesos do fine-tuning e logs de execução
+models/
+logs/
+
+# segredos
+.env
+*.env
+
+# private notes and internal runbook (not part of the public repo)
+00-mercado-e-desenho.md
+01-objetivo-e-escopo.md
+02-modelos-locais-mapeados.md
+RUNBOOK.md
+
+# third-party notebook kept only as a local reference (linked in the README)
+laya_finetune_ref.ipynb
+
+# obsolete exploration script (targeted the CFPB CSV before narratives were removed)
+01_explore.py
+
+# smoke-test outputs and raw API batch payloads (the payloads contain complaint text)
+results/smoke/
+results/batches/*.jsonl
