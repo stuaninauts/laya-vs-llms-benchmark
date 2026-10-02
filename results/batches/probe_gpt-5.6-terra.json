@@ -1,0 +1,7 @@
+{
+  "model": "gpt-5.6-terra",
+  "cost_usd": 0.003738,
+  "tok_in": 461.0,
+  "tok_out": 27.0,
+  "reasoning_tokens": 0.0
+}

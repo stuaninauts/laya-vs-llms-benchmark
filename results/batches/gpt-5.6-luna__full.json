@@ -1,0 +1,9 @@
+{
+  "batch_id": "batch_6abeec787a088190b36d9032b0c4dfae",
+  "provider": "openai",
+  "model": "gpt-5.6-luna",
+  "sample": "full",
+  "n": 1800,
+  "estimate_usd": 0.12564,
+  "submitted": "2026-10-01 20:27"
+}
