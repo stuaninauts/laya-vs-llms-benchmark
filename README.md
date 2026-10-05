@@ -1,60 +1,75 @@
-# LLM cascade for financial complaint triage
+# Laya vs LLMs: picking the right model for financial complaint triage
 
-**Do you need an LLM to route a customer complaint?** This repo benchmarks 13 systems on the same task — from
-TF-IDF to GPT-5.6 — on 1,800 real US consumer-finance complaints, measuring accuracy, calibration,
-latency and cost. It also tests a *cascade*: a small model decides when it is confident and only hands the
-doubtful cases to an LLM.
+Every few weeks a new model is announced as the one that replaces everything. Lately it's
+[Jev](https://en.wikipedia.org/wiki/Jev_(AI_model)) (TypeSafe AI): a "System 1" model that makes typed
+decisions — pick an option, score, yes/no — with calibrated probabilities in a single forward pass, instead of
+generating text like an LLM.
 
-The starting question was [Laya](https://github.com/NandhaKishorM/laya), an open-source "System 1"
-decision model (an alternative to TypeSafe's Jev) that answers typed decisions with calibrated probabilities
-in a single forward pass instead of generating text.
+Jev is in early access, so this repo tests its open-source counterpart, [Laya](https://github.com/NandhaKishorM/laya),
+on a real decision task — routing 1,800 US consumer-finance complaints to 9 teams and flagging fraud reports —
+against 12 other systems: classic ML, fine-tuned small models, local LLMs and paid GPT models. Every system is
+measured on the same complaints for **accuracy, latency, cost and calibration**, with paired significance tests.
+
+*Model versions and API prices as of September–October 2026.*
+
+![Laya vs classic ML vs GPT](figs/hero.png)
 
 ## TL;DR
 
-- **Accuracy is a tie, latency is not.** Fine-tuned small models, frozen embeddings + logistic regression,
-  TF-IDF and the GPT models all land in the 77–81% band for routing to 9 queues, and most pairwise gaps are
-  not statistically significant (TF-IDF vs gpt-5.4-mini: +0.1 pp, p = 1). Small models answer in 1–80 ms,
-  LLMs in ~1 s (API *or* local GPU).
-- **Small models are better calibrated.** Their stated confidence matches reality (ECE 0.03–0.05); every LLM
-  is overconfident (ECE 0.09–0.21), even when the probability is read from token logprobs. Every
-  small-model-vs-GPT calibration gap tested is significant (bootstrap 95% CIs exclude zero).
-- **The cascade is the best deal on the table.** ModernBERT decides 74% of complaints locally and sends the
-  rest to `gpt-5.6-luna`: **82.2% accuracy at US$ 35 per 1M complaints**. That is significantly better than
-  luna alone (79.2%, +3.0 pp, p < 0.001) and than ModernBERT alone (+3.4 pp). Against `gpt-5.6-terra`, the
-  most expensive model, it is a statistical tie (+1.6 pp, p = 0.13) at **1/39 of the cost**. Swapping luna
-  for terra as the fallback changes nothing (82.1% vs 82.0% on the same 900 complaints) at 10x the cost.
-- **Laya works once fine-tuned, but adds nothing measurable over a plain fine-tune.** Laya goes from 45%
-  zero-shot to 77% after fine-tuning. ModernBERT-large (Laya's own base) fine-tuned with ordinary
-  cross-entropy on the same data reaches 79% (+2.0 pp, not significant after correction), a slightly higher
-  fraud AUC (+0.017), the same calibration, and is 3x faster.
+- **Out of the box, Laya isn't ready.** Zero-shot it routes 45% of complaints correctly and its
+  probabilities are far off (fraud ECE 0.45).
+- **Fine-tuned, it delivers.** With 3,600 labeled complaints Laya reaches 76.8% — level with gpt-5.4-mini
+  (77.1%) — with better-calibrated probabilities (ECE 0.05 vs 0.11) and 12x lower latency (82 ms vs 961 ms).
+- **But the newest option wasn't the best one.** ModernBERT-large, Laya's own backbone, fine-tuned with
+  ordinary cross-entropy on the same data reaches 78.8% (+2.0 pp, not significant after correction), a
+  slightly higher fraud AUC and 3x lower latency. A 20-line TF-IDF + logistic regression ties gpt-5.4-mini
+  (77.2% vs 77.1%, p = 1) in 1 ms, for practically nothing.
+- **LLMs are slow and overconfident here.** ~1 s per decision whether they run through an API or on a local
+  GPU, and every LLM overstates its confidence (ECE 0.09–0.21; when gpt-5.4-mini says 97% fraud, it is right
+  62% of the time).
+- **Combining models gave the best result.** A fine-tuned ModernBERT answers when it is confident (74% of
+  complaints) and passes only the doubtful ones to `gpt-5.6-luna`: **82.2% accuracy at US$ 35 per 1M
+  complaints** — significantly above luna alone (79.2%, p < 0.001) and statistically tied with the most
+  expensive model, `gpt-5.6-terra` (80.6%, US$ 1,367 per 1M), at 1/39 of its cost.
 
-![Accuracy, latency and cost of the main systems](figs/tradeoff_panels.png)
+**Reading the numbers.** *Accuracy*: share of complaints sent to the right team. *Calibration error (ECE)*:
+how far a model's stated confidence is from how often it is actually right (0 = says 80% and is right 80% of
+the time). *p50 latency*: median time for one decision. *pp*: percentage points. *Cascade*: a small model
+answers when it is confident and passes the rest to an LLM.
 
-![Hype check: TF-IDF vs gpt-5.4-mini](figs/hype_check.png)
+## Choosing the right model
 
-## When is an LLM worth it?
+Popularity is not a design criterion. The same benchmark points to different answers depending on what the
+application can afford:
 
-New decision models like Jev and Laya, and every new LLM release, come with the promise of replacing
-everything. For a **classification** step the useful question is narrower: what does each extra accuracy
-point cost, in money and in latency, for *this* task?
+| Your situation | What worked here | Why |
+|---|---|---|
+| No labeled data yet | An LLM (e.g. `gpt-5.6-luna`) | Works zero-shot; Laya zero-shot did not (45%) |
+| Labeled data, high volume, tight latency | TF-IDF first, then a fine-tuned encoder | Same accuracy as GPT in 1–80 ms, near-zero cost |
+| Every accuracy point matters | Small model + LLM for the doubtful cases | Highest accuracy here, at a fraction of the top model's cost |
+| You set thresholds or send cases to humans | A trained small model | Calibrated probabilities; LLM confidence is inflated |
+| Data cannot leave your infrastructure | Local small models | Local LLMs still took ~1 s per decision on a GPU |
+| Labels change often, or the decision needs reasoning over long context | An LLM | Retraining is not an option; the latency and token cost pay off |
 
-- **Start with the boring baseline.** A TF-IDF + logistic regression trained on 3,600 labeled examples
-  matches gpt-5.4-mini on routing accuracy and fraud AUC, is better calibrated, answers in 1 ms and costs
-  essentially nothing. If labeled data exists, this is the bar every heavier model has to clear.
+A few rules of thumb from the numbers:
+
+- **Start with the boring baseline.** If labeled data exists, TF-IDF + logistic regression is the bar every
+  heavier model has to clear — here it matched gpt-5.4-mini and was better calibrated.
 - **Most of the accuracy is cheap; the last points are not.** Going from TF-IDF to the best single model
-  (gpt-5.6-terra) buys about 3 points (77.8% → 80.6% on the paired 900 complaints, not significant after
-  correction) for ~US$ 1,400 per 1M decisions and ~1 s per call.
-- **Spend the LLM only where the small model is unsure.** A cascade keeps the cheap path for most traffic,
-  reaches the highest accuracy of the benchmark and is the only configuration that significantly beats the
-  LLM it falls back to.
-- **When an LLM is the right call:** no labeled data yet (zero-shot), labels that change often, or
-  decisions that need reasoning over long context. That is where the 1 s and the per-token cost pay off.
+  buys about 3 points (77.8% → 80.6% on the paired 900 complaints, not significant after correction) for
+  ~US$ 1,400 per 1M decisions and ~1 s per call.
+- **Spend the LLM only where the small model is unsure.** Swapping the fallback from luna to terra changed
+  nothing (82.1% vs 82.0%) at 10x the cost: once the easy cases are filtered out, the expensive model has
+  little left to add.
 
 ![Cost vs accuracy](figs/cost_vs_accuracy.png)
 
-![Routing accuracy vs latency](figs/accuracy_vs_latency.png)
+## Hardware and cost
 
-![Cascade accuracy and cost](figs/cascade_cost.png)
+Everything local ran on one desktop with an **NVIDIA RTX 3060 (12 GB)**: Laya fine-tuning took ~36 min,
+ModernBERT ~14 min, and the three local LLMs 18–33 min each for 1,800 complaints. API calls for the whole
+experiment cost **about US$ 2.20**, using the Batch API (-50%) for accuracy and a few hundred synchronous
+calls for latency.
 
 ## Task
 
@@ -77,7 +92,9 @@ Each complaint gets two decisions — the shape of a real triage step at a bank 
 - **Test:** 1,800 complaints, 200 per queue, fraud enriched to 21.2%. **Train:** 3,600, disjoint.
   **Paired subset `s900`:** 100 per queue, used for the expensive model and paired comparisons.
 
-Raw data is not redistributed; `00_download_data.py` rebuilds it (the splits are deterministic).
+Raw data is not redistributed; `00_download_data.py` rebuilds it (the splits are deterministic). The CFPB
+publishes narratives only with the consumer's consent and after removing personal information (names, account
+numbers and dates appear as `XXXX`); this repo stores predictions and metrics, never complaint text.
 
 ## Results (n = 1,800)
 
@@ -90,16 +107,18 @@ Raw data is not redistributed; `00_download_data.py` rebuilds it (the splits are
 | TF-IDF + LR | small model | 77.2% | 0.865 | 0.052 | **1 ms** | ~0 ² |
 | gpt-5.4-mini | API LLM | 77.1% | 0.868 | 0.111 | 961 ms | 512 |
 | Granite-embedding-small-r2 + LR | small model | 76.8% | 0.866 | **0.034** | 18 ms | 0.01 ² |
-| Laya, fine-tuned | small model | 76.8% | 0.889 | 0.050 | 82 ms | 0.33 ² |
+| Laya, fine-tuned | **Laya** | 76.8% | 0.889 | 0.050 | 82 ms | 0.33 ² |
 | Gemma 4 12B (Ollama) | local LLM | 75.4% | 0.788 | 0.163 | 1,123 ms | 7.8 ² |
 | gpt-5.4-nano | API LLM | 72.8% | 0.853 | 0.206 | 1,011 ms | 137 |
 | Qwen3.5 9B (Ollama) | local LLM | 71.6% | 0.810 | 0.086 | 848 ms | 6.2 ² |
 | Qwen3.5 4B (Ollama) | local LLM | 65.4% | 0.641 | 0.207 | 608 ms | 4.3 ² |
-| Laya, zero-shot | small model | 45.1% | 0.676 | 0.450 | 71 ms | 0.35 ² |
+| Laya, zero-shot | **Laya** | 45.1% | 0.676 | 0.450 | 71 ms | 0.35 ² |
 
 ¹ Evaluated on the paired `s900` subset (cost). On `s900`, the ordering of the other systems is unchanged
 (`results/summary.md`). ² Local cost = GPU energy at batched throughput (170 W, US$ 0.15/kWh).
 API cost = synchronous list price; the Batch API halves it. Latency = one complaint per call.
+
+![Routing accuracy vs latency](figs/accuracy_vs_latency.png)
 
 ### Cascade (threshold fixed at 0.7 before looking at results)
 
@@ -112,6 +131,8 @@ API cost = synchronous list price; the Batch API halves it. Latency = one compla
 
 `results/cascade_best.csv` lists the best threshold per cascade (up to 82.5%), but that threshold is chosen on
 the test set and is therefore optimistic.
+
+![Cascade accuracy and cost](figs/cascade_cost.png)
 
 ## Statistical significance
 
@@ -166,6 +187,15 @@ ECE (−0.004 [−0.015, +0.009]).
 - API latency depends on network location (measured from southern Brazil).
 - TypeSafe's Jev itself was not tested (early access only).
 
+## What's next
+
+- **Recalibrate LLM confidence** (Platt scaling, isotonic regression) and measure how many labeled examples
+  it takes to fix the overconfidence.
+- **Few-shot prompts** for the LLMs: does giving them a handful of labeled examples close the gap with the
+  fine-tuned models?
+- **Portuguese complaints**, to check whether the conclusions hold outside English.
+- **Jev itself**, once access opens.
+
 ## Reproduce
 
 ```bash
@@ -185,6 +215,7 @@ python 13_llm_api.py submit openai gpt-5.6-luna full --spend   # paid; never ove
 python 06_analyze.py                 # results/summary.md + cascades
 python 15_figures.py                 # figures
 python 16_significance.py            # paired significance tests
+python 17_hero_figure.py             # summary figure
 ```
 
 `SMOKE=1` runs any local script on 5 complaints. Paid scripts refuse to run without `--spend` and stop at a
@@ -211,12 +242,19 @@ budget cap (`BUDGET_USD`, default 2). The full experiment cost about **US$ 2.20*
 | `10_local_llm.py`, `pull_ollama_models.sh` | local LLMs via Ollama with logprobs |
 | `06_analyze.py`, `15_figures.py`, `run.sh` | metrics, paired comparison, cascades, figures |
 | `16_significance.py` | paired significance tests (McNemar, bootstrap) |
+| `17_hero_figure.py` | the summary figure at the top of this README |
 | `common.py`, `sysio.py`, `download_models.py` | shared definitions, result format, model download |
 | `results/` | per-system predictions (no complaint text), summary and cascade tables |
 
 ## Notes
 
-Personal project built on public data; not affiliated with any employer. Model weights follow their own
+Personal project built on public data; not affiliated with any employer. The numbers in this README are the
+ones published with the original post; the `v1.0` tag marks that snapshot. Model weights follow their own
 licenses (Laya: Apache-2.0; ModernBERT, Qwen and Granite: Apache-2.0; Gemma 4: Apache-2.0).
 
 Code: [MIT](LICENSE).
+
+## Author
+
+Eduardo Stuani — data engineer working on LLM evaluation and data pipelines.
+[LinkedIn](https://www.linkedin.com/in/eduardostuani)

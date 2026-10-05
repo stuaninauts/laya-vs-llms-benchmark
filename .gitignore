@@ -30,3 +30,6 @@ laya_finetune_ref.ipynb
 # smoke-test outputs and raw API batch payloads (the payloads contain complaint text)
 results/smoke/
 results/batches/*.jsonl
+
+# LinkedIn post material (carousel, drafts)
+post/
